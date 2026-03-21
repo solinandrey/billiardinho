@@ -15,4 +15,4 @@ RUN mkdir -p /app/data
 
 ENV DB_PATH=/app/data/billiard.db
 
-CMD ["node", "src/bot.js"]
+CMD ["sh", "-c", "node import.js && node src/bot.js"]
