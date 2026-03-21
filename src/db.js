@@ -14,13 +14,13 @@ class BilliardDB {
   init() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pairs (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        uid1            INTEGER NOT NULL,   -- numeric Telegram ID of player 1
-        uid2            INTEGER,            -- numeric Telegram ID of player 2 (filled when they join)
-        username2       TEXT,               -- @username of player 2 (used to match when they join)
-        name1           TEXT NOT NULL,      -- display name of player 1
-        name2           TEXT,               -- display name of player 2 (filled when they join)
-        created_at      TEXT NOT NULL
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        uid1         INTEGER NOT NULL,   -- numeric Telegram ID of player 1
+        uid2         INTEGER,            -- numeric Telegram ID of player 2 (filled when they join)
+        username2    TEXT,               -- @username of player 2 (used to match when they join)
+        name1        TEXT NOT NULL,      -- display name of player 1
+        name2        TEXT,               -- display name of player 2 (filled when they join)
+        created_at   TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS sessions (
@@ -35,7 +35,9 @@ class BilliardDB {
 
   // ─── Pair lookup ─────────────────────────────────────────────────────────────
 
-  /** Find a complete pair this user belongs to (by numeric ID) */
+  /**
+   * Find a complete pair (both players set up) that this user belongs to.
+   */
   getPairForUser(uid) {
     return this.db
       .prepare(`
@@ -47,8 +49,18 @@ class BilliardDB {
   }
 
   /**
+   * Find any pair created by this uid, complete or not.
+   * Used on /start so the creator doesn't get asked their name again.
+   */
+  getPairByCreator(uid) {
+    return this.db
+      .prepare("SELECT * FROM pairs WHERE uid1 = ? ORDER BY id DESC LIMIT 1")
+      .get(uid);
+  }
+
+  /**
    * Find a pending pair waiting for this user to join.
-   * Matches by numeric uid2 (if already resolved) OR by @username.
+   * Matches by numeric uid2 OR by @username.
    */
   getPendingPairForPartner(uid, username) {
     // Try numeric uid2 match first
@@ -57,7 +69,7 @@ class BilliardDB {
       .get(uid);
     if (row) return row;
 
-    // Try username match (case-insensitive, strip leading @)
+    // Try username match (case-insensitive, strip @)
     if (username) {
       const clean = username.replace(/^@/, "").toLowerCase();
       row = this.db
@@ -72,7 +84,7 @@ class BilliardDB {
   }
 
   /**
-   * Create a new pair. partner can be "@username" or numeric ID string.
+   * Create a new pair. partnerInput can be "@username" or a numeric ID string.
    */
   createPair(uid1, name1, partnerInput) {
     const now = new Date().toISOString();
@@ -83,7 +95,6 @@ class BilliardDB {
         .prepare("INSERT INTO pairs (uid1, uid2, name1, created_at) VALUES (?, ?, ?, ?)")
         .run(uid1, parseInt(partnerInput), name1, now);
     } else {
-      // Store username (normalise to lowercase without @)
       const username = partnerInput.startsWith("@") ? partnerInput : `@${partnerInput}`;
       this.db
         .prepare("INSERT INTO pairs (uid1, username2, name1, created_at) VALUES (?, ?, ?, ?)")

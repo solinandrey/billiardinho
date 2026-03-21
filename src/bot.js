@@ -39,36 +39,66 @@ function forceReply(chatId, text) {
   });
 }
 
+/** Best display name from Telegram profile */
+function getTelegramName(from) {
+  if (from.first_name && from.last_name) return `${from.first_name} ${from.last_name}`;
+  if (from.first_name) return from.first_name;
+  if (from.username) return from.username;
+  return "Игрок";
+}
+
 // ─── /start ───────────────────────────────────────────────────────────────────
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   const uid = msg.from.id;
-  const username = msg.from.username || null; // e.g. "soulin" (no @)
+  const username = msg.from.username || null;
+  const telegramName = getTelegramName(msg.from);
   clearState(chatId);
 
   // 1. Already in a complete pair → menu
-  const existingPair = db.getPairForUser(uid);
-  if (existingPair) {
-    const { myName, theirName } = db.getNamesForUser(existingPair, uid);
+  const completePair = db.getPairForUser(uid);
+  if (completePair) {
+    const { myName, theirName } = db.getNamesForUser(completePair, uid);
     sendMenu(chatId, `С возвращением, *${myName}*! 🎱\nТвой соперник: *${theirName}*`);
     return;
   }
 
-  // 2. Someone invited this user (by @username or numeric ID) → ask their name
-  const pendingPair = db.getPendingPairForPartner(uid, username);
-  if (pendingPair) {
-    setState(chatId, "join_name", { pairId: pendingPair.id });
-    forceReply(
+  // 2. Created a pair before (e.g. via import) but partner hasn't joined yet
+  const createdPair = db.getPairByCreator(uid);
+  if (createdPair) {
+    const theirName = createdPair.name2 || createdPair.username2 || "соперник";
+    sendMenu(
       chatId,
-      `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\n` +
-        `Как тебя зовут?`
+      `С возвращением, *${createdPair.name1}*! 🎱\n` +
+        (createdPair.name2
+          ? `Твой соперник: *${theirName}*`
+          : `Ожидаем, когда *${theirName}* запустит бота...`)
     );
     return;
   }
 
-  // 3. Brand new user → setup flow
-  setState(chatId, "setup_name");
-  forceReply(chatId, `Привет! 🎱 Я буду вести счёт ваших партий в бильярд.\n\nКак тебя зовут?`);
+  // 3. Invited as partner (matched by uid or @username) → confirm name
+  const pendingPair = db.getPendingPairForPartner(uid, username);
+  if (pendingPair) {
+    // Auto-fill name from Telegram profile, ask to confirm
+    setState(chatId, "join_confirm_name", { pairId: pendingPair.id, suggestedName: telegramName });
+    bot.sendMessage(
+      chatId,
+      `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\n` +
+        `Тебя зовут *${telegramName}*? Отправь имя если хочешь изменить, или напиши *ок* чтобы продолжить.`,
+      { parse_mode: "Markdown", reply_markup: { force_reply: true } }
+    );
+    return;
+  }
+
+  // 4. Brand new user → setup, use Telegram name as suggestion
+  setState(chatId, "setup_confirm_name", { suggestedName: telegramName });
+  bot.sendMessage(
+    chatId,
+    `Привет! 🎱 Я буду вести счёт ваших партий в бильярд.\n\n` +
+      `Тебя зовут *${telegramName}*? Отправь имя если хочешь изменить, или напиши *ок* чтобы продолжить.`,
+    { parse_mode: "Markdown", reply_markup: { force_reply: true } }
+  );
 });
 
 // ─── /help ────────────────────────────────────────────────────────────────────
@@ -99,19 +129,22 @@ bot.on("message", (msg) => {
 
   const { state, data } = getState(chatId);
 
-  // ── FSM: Enter your name ──────────────────────────────────────────────────────
-  if (state === "setup_name") {
-    if (!text || text.length > 32) {
-      bot.sendMessage(chatId, "Имя не должно быть пустым или слишком длинным. Попробуй ещё раз:");
+  // ── FSM: New user — confirm or change Telegram name ───────────────────────────
+  if (state === "setup_confirm_name") {
+    const name = (text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
+      ? data.suggestedName
+      : text;
+    if (!name || name.length > 32) {
+      bot.sendMessage(chatId, "Имя слишком длинное. Попробуй ещё раз:");
       return;
     }
-    setState(chatId, "setup_partner", { myName: text });
+    setState(chatId, "setup_partner", { myName: name });
     forceReply(
       chatId,
-      `Отлично, *${text}*! 👋\n\n` +
-        `Теперь введи *@username* соперника в Telegram.\n\n` +
-        `Например: \`@soulin\`\n\n` +
-        `_Если у соперника нет username — введи его числовой ID (узнать можно у @userinfobot)_`
+      `Отлично, *${name}*! 👋\n\n` +
+        `Введи *@username* соперника в Telegram.\n` +
+        `Например: \`@alexey\`\n\n` +
+        `_Если у соперника нет username — введи его числовой ID (узнать: @userinfobot)_`
     );
     return;
   }
@@ -119,15 +152,13 @@ bot.on("message", (msg) => {
   // ── FSM: Enter partner's @username or numeric ID ──────────────────────────────
   if (state === "setup_partner") {
     const input = text.trim();
-
-    // Validate: must be @username or a positive number
     const isUsername = /^@?[a-zA-Z0-9_]{4,32}$/.test(input);
     const isNumericId = /^\d{5,}$/.test(input);
 
     if (!isUsername && !isNumericId) {
       bot.sendMessage(
         chatId,
-        "Не понял. Введи @username соперника (например `@soulin`) или его числовой Telegram ID:",
+        "Введи @username (например `@alexey`) или числовой Telegram ID:",
         { parse_mode: "Markdown" }
       );
       return;
@@ -137,30 +168,33 @@ bot.on("message", (msg) => {
     db.createPair(uid, myName, input);
     clearState(chatId);
 
-    const displayPartner = input.startsWith("@") ? input : `@${input}`;
+    const displayPartner = isNumericId ? input : (input.startsWith("@") ? input : `@${input}`);
     sendMenu(
       chatId,
       `✅ Готово, *${myName}*!\n\n` +
-        `Как только *${isNumericId ? input : displayPartner}* запустит бота — он автоматически попадёт в вашу общую таблицу.\n\n` +
+        `Как только *${displayPartner}* запустит бота — он автоматически попадёт в вашу таблицу.\n\n` +
         `Пока можешь уже записывать партии 👇`
     );
     return;
   }
 
-  // ── FSM: Partner joins — enters their name ────────────────────────────────────
-  if (state === "join_name") {
-    if (!text || text.length > 32) {
-      bot.sendMessage(chatId, "Имя не должно быть пустым. Попробуй ещё раз:");
+  // ── FSM: Partner — confirm or change Telegram name ────────────────────────────
+  if (state === "join_confirm_name") {
+    const name = (text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
+      ? data.suggestedName
+      : text;
+    if (!name || name.length > 32) {
+      bot.sendMessage(chatId, "Имя слишком длинное. Попробуй ещё раз:");
       return;
     }
     const { pairId } = data;
-    db.completePair(pairId, uid, text);
+    db.completePair(pairId, uid, name);
     clearState(chatId);
 
     const pair = db.getPairForUser(uid);
     sendMenu(
       chatId,
-      `Добро пожаловать, *${text}*! 🎱\n` +
+      `Добро пожаловать, *${name}*! 🎱\n` +
         `Ты в одной таблице с *${pair.name1}*.\n\n` +
         `Все партии — общие 👇`
     );
@@ -174,8 +208,9 @@ bot.on("message", (msg) => {
       bot.sendMessage(chatId, "Введи корректное число от 0 до 99:");
       return;
     }
-    const pair = db.getPairForUser(uid);
-    const { theirName } = db.getNamesForUser(pair, uid);
+    // Use creator pair if partner hasn't joined yet
+    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
+    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
     setState(chatId, "record_score2", { ...data, score_me: n });
     askNumber(chatId, `Понял! Теперь — сколько партий выиграл *${theirName}*?`);
     return;
@@ -189,13 +224,13 @@ bot.on("message", (msg) => {
       return;
     }
 
-    const pair = db.getPairForUser(uid);
-    const { myName, theirName } = db.getNamesForUser(pair, uid);
+    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
+    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
+    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
     const scoreMe = data.score_me;
     const scoreThem = n;
     const now = new Date().toISOString();
 
-    // Always persist score1=uid1, score2=uid2
     const score1 = pair.uid1 === uid ? scoreMe : scoreThem;
     const score2 = pair.uid1 === uid ? scoreThem : scoreMe;
 
@@ -203,11 +238,9 @@ bot.on("message", (msg) => {
     clearState(chatId);
 
     const winner =
-      scoreMe > scoreThem
-        ? `🏆 Победил *${myName}*!`
-        : scoreThem > scoreMe
-        ? `🏆 Победил *${theirName}*!`
-        : "🤝 Ничья!";
+      scoreMe > scoreThem ? `🏆 Победил *${myName}*!`
+      : scoreThem > scoreMe ? `🏆 Победил *${theirName}*!`
+      : "🤝 Ничья!";
 
     sendMenu(
       chatId,
@@ -230,14 +263,15 @@ bot.on("message", (msg) => {
   }
 
   // ── Menu buttons ──────────────────────────────────────────────────────────────
-  const pair = db.getPairForUser(uid);
+  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
 
   if (!pair) {
     bot.sendMessage(chatId, "Сначала запусти /start чтобы настроить бота.");
     return;
   }
 
-  const { myName, theirName } = db.getNamesForUser(pair, uid);
+  const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
+  const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
 
   switch (text) {
     case "🎱 Записать счёт": {
@@ -248,7 +282,7 @@ bot.on("message", (msg) => {
 
     case "📊 Статистика": {
       const rows = db.getAllSessions(pair.id);
-      bot.sendMessage(chatId, formatStats(rows, "Всё время", pair.name1, pair.name2), {
+      bot.sendMessage(chatId, formatStats(rows, "Всё время", pair.name1, pair.name2 || "Соперник"), {
         parse_mode: "Markdown",
       });
       break;
@@ -256,7 +290,7 @@ bot.on("message", (msg) => {
 
     case "📋 Последние партии": {
       const rows = db.getLastSessions(pair.id, 10);
-      bot.sendMessage(chatId, formatSessions(rows, pair.name1, pair.name2), {
+      bot.sendMessage(chatId, formatSessions(rows, pair.name1, pair.name2 || "Соперник"), {
         parse_mode: "Markdown",
       });
       break;
@@ -266,9 +300,7 @@ bot.on("message", (msg) => {
       setState(chatId, "month_input");
       forceReply(
         chatId,
-        `За какой месяц?\n\n` +
-          `Напиши *текущий* — за текущий месяц,\n` +
-          `или дату в формате *ГГГГ-ММ*, например \`2025-11\``
+        `За какой месяц?\n\nНапиши *текущий* или дату в формате *ГГГГ-ММ*, например \`2025-11\``
       );
       break;
     }
@@ -278,7 +310,6 @@ bot.on("message", (msg) => {
       forceReply(
         chatId,
         `За какой период?\n\n` +
-          `*Примеры:*\n` +
           `\`3w\` — последние 3 недели\n` +
           `\`2m\` — последние 2 месяца\n` +
           `\`10d\` — последние 10 дней\n` +
@@ -293,7 +324,7 @@ bot.on("message", (msg) => {
         sendMenu(
           chatId,
           `✅ Последняя запись удалена:\n` +
-            `${deleted.played_at.slice(0, 10)} — ${pair.name1} ${deleted.score1}:${deleted.score2} ${pair.name2}`
+            `${deleted.played_at.slice(0, 10)} — ${pair.name1} ${deleted.score1}:${deleted.score2} ${pair.name2 || "Соперник"}`
         );
       } else {
         bot.sendMessage(chatId, "Нет записей для удаления.");
@@ -309,7 +340,7 @@ bot.on("message", (msg) => {
 // ─── Helper: period stats ──────────────────────────────────────────────────────
 function handlePeriodInput(chatId, uid, arg) {
   clearState(chatId);
-  const pair = db.getPairForUser(uid);
+  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
   if (!pair) return;
   let from, to, label;
 
@@ -324,7 +355,7 @@ function handlePeriodInput(chatId, uid, arg) {
   } else {
     const dates = arg.match(/(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})/);
     if (!dates) {
-      bot.sendMessage(chatId, "Не понял формат. Попробуй: `3w`, `2m`, или `2025-01-01 2025-03-01`", { parse_mode: "Markdown" });
+      bot.sendMessage(chatId, "Не понял. Попробуй: `3w`, `2m`, или `2025-01-01 2025-03-01`", { parse_mode: "Markdown" });
       return;
     }
     from = new Date(dates[1]); to = new Date(dates[2]);
@@ -332,13 +363,13 @@ function handlePeriodInput(chatId, uid, arg) {
   }
 
   const rows = db.getSessionsByPeriod(pair.id, from.toISOString(), to.toISOString());
-  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2), { parse_mode: "Markdown" });
+  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2 || "Соперник"), { parse_mode: "Markdown" });
 }
 
 // ─── Helper: month stats ───────────────────────────────────────────────────────
 function handleMonthInput(chatId, uid, arg) {
   clearState(chatId);
-  const pair = db.getPairForUser(uid);
+  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
   if (!pair) return;
   let year, month;
 
@@ -348,7 +379,7 @@ function handleMonthInput(chatId, uid, arg) {
   } else {
     const match = arg.match(/^(\d{4})-(\d{2})$/);
     if (!match) {
-      bot.sendMessage(chatId, "Не понял. Напиши *текущий* или дату в формате `2025-11`", { parse_mode: "Markdown" });
+      bot.sendMessage(chatId, "Не понял. Напиши *текущий* или `2025-11`", { parse_mode: "Markdown" });
       return;
     }
     year = parseInt(match[1]); month = parseInt(match[2]);
@@ -356,7 +387,7 @@ function handleMonthInput(chatId, uid, arg) {
 
   const rows = db.getSessionsByMonth(pair.id, year, month);
   const label = `${year}-${String(month).padStart(2, "0")}`;
-  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2), { parse_mode: "Markdown" });
+  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2 || "Соперник"), { parse_mode: "Markdown" });
 }
 
 bot.on("polling_error", (err) => console.error("Polling error:", err.message));

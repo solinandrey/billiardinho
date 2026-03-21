@@ -1,11 +1,12 @@
 /**
- * import.js — one-time import of historical Excel data into billiard.db
+ * import.js — one-time import of historical data into billiard.db
  *
  * BEFORE RUNNING:
- *   1. Fill in YOUR_TELEGRAM_ID below (get it from @userinfobot)
- *   2. Fill in PARTNER_USERNAME (e.g. "@alexey") OR PARTNER_TELEGRAM_ID
- *   3. Run: node import.js
+ *   1. Fill in YOUR_TELEGRAM_ID (get it from @userinfobot in Telegram)
+ *   2. Fill in PARTNER_USERNAME (e.g. "@alexey") — OR PARTNER_TELEGRAM_ID if no username
+ *   3. node import.js
  *
+ * Historical data is ONLY inserted into your pair — other users start fresh.
  * Safe to run multiple times — skips duplicate dates.
  */
 
@@ -17,12 +18,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data/billiard.db");
 
 // ─── FILL THESE IN ────────────────────────────────────────────────────────────
-const YOUR_TELEGRAM_ID   = 71229105;  
-const PARTNER_USERNAME   = "@al_lap";  
-const PARTNER_TELEGRAM_ID = 0;         
-
-const YOUR_NAME    = "Андрей";
-const PARTNER_NAME = "Алексей";
+const YOUR_TELEGRAM_ID    = 71229105;           // ← твой числовой ID (от @userinfobot)
+const PARTNER_USERNAME    = "@al_lap";   // ← @username соперника (или оставь "")
+const PARTNER_TELEGRAM_ID = 0;           // ← числовой ID соперника (если нет username)
+const YOUR_NAME           = "Андрей";
+const PARTNER_NAME        = "Алексей";
 // ─────────────────────────────────────────────────────────────────────────────
 
 if (!YOUR_TELEGRAM_ID) {
@@ -30,7 +30,7 @@ if (!YOUR_TELEGRAM_ID) {
   process.exit(1);
 }
 if (!PARTNER_USERNAME && !PARTNER_TELEGRAM_ID) {
-  console.error("❌ Заполни PARTNER_USERNAME или PARTNER_TELEGRAM_ID в файле import.js");
+  console.error("❌ Заполни PARTNER_USERNAME или PARTNER_TELEGRAM_ID");
   process.exit(1);
 }
 
@@ -73,30 +73,25 @@ db.exec(`
   );
 `);
 
-// Find or create the pair
-let pair = db
-  .prepare("SELECT * FROM pairs WHERE uid1 = ?")
-  .get(YOUR_TELEGRAM_ID);
+// Find or create the pair for this specific uid1
+let pair = db.prepare("SELECT * FROM pairs WHERE uid1 = ?").get(YOUR_TELEGRAM_ID);
 
 if (!pair) {
   const now = new Date().toISOString();
   const username2 = PARTNER_USERNAME || null;
   const uid2 = PARTNER_TELEGRAM_ID || null;
-
   db.prepare(`
     INSERT INTO pairs (uid1, uid2, username2, name1, name2, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(YOUR_TELEGRAM_ID, uid2, username2, YOUR_NAME, PARTNER_NAME, now);
-
   pair = db.prepare("SELECT * FROM pairs WHERE uid1 = ?").get(YOUR_TELEGRAM_ID);
   console.log(`✅ Пара создана: ${YOUR_NAME} & ${PARTNER_NAME}`);
 } else {
-  // Ensure name2 is filled even if partner hasn't joined yet
   if (!pair.name2) {
     db.prepare("UPDATE pairs SET name2 = ? WHERE id = ?").run(PARTNER_NAME, pair.id);
     pair = db.prepare("SELECT * FROM pairs WHERE id = ?").get(pair.id);
   }
-  console.log(`ℹ️  Пара уже существует (id=${pair.id}), добавляю партии...`);
+  console.log(`ℹ️  Пара уже есть (id=${pair.id}), добавляю партии...`);
 }
 
 const checkStmt = db.prepare(
@@ -111,15 +106,13 @@ let inserted = 0, skipped = 0;
 for (const [date, s1, s2] of HISTORICAL) {
   const dayStart = `${date}T00:00:00.000Z`;
   const dayEnd   = `${date}T23:59:59.999Z`;
-  const existing = checkStmt.get(pair.id, dayStart, dayEnd);
-
-  if (existing) {
-    console.log(`⏭  Пропущено (уже есть): ${date} ${s1}:${s2}`);
+  if (checkStmt.get(pair.id, dayStart, dayEnd)) {
+    console.log(`⏭  Пропущено: ${date} ${s1}:${s2}`);
     skipped++;
   } else {
     insertStmt.run(pair.id, s1, s2, `${date}T12:00:00.000Z`);
-    const winner = s1 > s2 ? YOUR_NAME : s2 > s1 ? PARTNER_NAME : "ничья";
-    console.log(`✅ ${date}  ${YOUR_NAME} ${s1}:${s2} ${PARTNER_NAME}  → ${winner}`);
+    const w = s1 > s2 ? YOUR_NAME : s2 > s1 ? PARTNER_NAME : "ничья";
+    console.log(`✅ ${date}  ${YOUR_NAME} ${s1}:${s2} ${PARTNER_NAME}  → ${w}`);
     inserted++;
   }
 }
