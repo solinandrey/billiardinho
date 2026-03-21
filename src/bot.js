@@ -48,6 +48,17 @@ function forceReply(chatId, text) {
   });
 }
 
+function askNameConfirm(chatId, text, suggestedName) {
+  bot.sendMessage(chatId, text, {
+    parse_mode: "Markdown",
+    reply_markup: {
+      keyboard: [[{ text: suggestedName }], [{ text: "✏️ Ввести другое имя" }]],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    },
+  });
+}
+
 /** Best display name from Telegram profile */
 function getTelegramName(from) {
   if (from.first_name && from.last_name) return `${from.first_name} ${from.last_name}`;
@@ -78,11 +89,10 @@ bot.onText(/\/start/, (msg) => {
   if (pendingPair) {
     // Auto-fill name from Telegram profile, ask to confirm
     setState(chatId, "join_confirm_name", { pairId: pendingPair.id, suggestedName: telegramName });
-    bot.sendMessage(
+    askNameConfirm(
       chatId,
-      `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\n` +
-        `Тебя зовут *${telegramName}*? Отправь имя если хочешь изменить, или напиши *ок* чтобы продолжить.`,
-      { parse_mode: "Markdown", reply_markup: { force_reply: true } }
+      `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\nКак тебя зовут?`,
+      telegramName
     );
     return;
   }
@@ -103,11 +113,10 @@ bot.onText(/\/start/, (msg) => {
 
   // 4. Brand new user → setup, use Telegram name as suggestion
   setState(chatId, "setup_confirm_name", { suggestedName: telegramName });
-  bot.sendMessage(
+  askNameConfirm(
     chatId,
-    `Привет! 🎱 Я буду вести счёт ваших партий в бильярд.\n\n` +
-      `Тебя зовут *${telegramName}*? Отправь имя если хочешь изменить, или напиши *ок* чтобы продолжить.`,
-    { parse_mode: "Markdown", reply_markup: { force_reply: true } }
+    `Привет! 🎱 Я буду вести счёт ваших партий в бильярд.\n\nКак тебя зовут?`,
+    telegramName
   );
 });
 
@@ -147,7 +156,12 @@ bot.on("message", (msg) => {
 
   // ── FSM: New user — confirm or change Telegram name ───────────────────────────
   if (state === "setup_confirm_name") {
-    const name = (text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
+    if (text === "✏️ Ввести другое имя") {
+      setState(chatId, "setup_type_name", data);
+      askWithCancel(chatId, "Введи своё имя:");
+      return;
+    }
+    const name = (text === data.suggestedName || text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
       ? data.suggestedName
       : text;
     if (!name || name.length > 32) {
@@ -161,6 +175,42 @@ bot.on("message", (msg) => {
         `Введи *@username* соперника в Telegram.\n` +
         `Например: \`@alexey\`\n\n` +
         `_Если у соперника нет username — введи его числовой ID (узнать: @userinfobot)_`
+    );
+    return;
+  }
+
+  // ── FSM: New user — manually typed name ───────────────────────────────────────
+  if (state === "setup_type_name") {
+    if (!text || text.length > 32) {
+      askWithCancel(chatId, "Имя слишком длинное. Введи покороче:");
+      return;
+    }
+    setState(chatId, "setup_partner", { myName: text });
+    forceReply(
+      chatId,
+      `Отлично, *${text}*! 👋\n\n` +
+        `Введи *@username* соперника в Telegram.\n` +
+        `Например: \`@alexey\`\n\n` +
+        `_Если у соперника нет username — введи его числовой ID (узнать: @userinfobot)_`
+    );
+    return;
+  }
+
+  // ── FSM: Partner — manually typed name ────────────────────────────────────────
+  if (state === "join_type_name") {
+    if (!text || text.length > 32) {
+      askWithCancel(chatId, "Имя слишком длинное. Введи покороче:");
+      return;
+    }
+    const { pairId } = data;
+    db.completePair(pairId, uid, text);
+    clearState(chatId);
+    const pair = db.getPairForUser(uid);
+    sendMenu(
+      chatId,
+      `Добро пожаловать, *${text}*! 🎱\n` +
+        `Ты в одной таблице с *${pair.name1}*.\n\n` +
+        `Все партии — общие 👇`
     );
     return;
   }
@@ -196,7 +246,12 @@ bot.on("message", (msg) => {
 
   // ── FSM: Partner — confirm or change Telegram name ────────────────────────────
   if (state === "join_confirm_name") {
-    const name = (text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
+    if (text === "✏️ Ввести другое имя") {
+      setState(chatId, "join_type_name", data);
+      askWithCancel(chatId, "Введи своё имя:");
+      return;
+    }
+    const name = (text === data.suggestedName || text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
       ? data.suggestedName
       : text;
     if (!name || name.length > 32) {
@@ -421,7 +476,7 @@ bot.on("message", (msg) => {
     }
 
     default:
-      bot.sendMessage(chatId, "Используй кнопки меню 👇 или /help для справки.");
+      sendMenu(chatId, "Используй кнопки меню 👇");
   }
 });
 
