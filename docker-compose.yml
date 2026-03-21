@@ -1,0 +1,8 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # SQLite data persists across restarts
+      - ./data:/app/data

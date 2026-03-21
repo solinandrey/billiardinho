@@ -1,0 +1,14 @@
+{
+  "name": "billiard-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node --env-file=.env src/bot.js",
+    "dev": "node --watch --env-file=.env src/bot.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
