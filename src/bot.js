@@ -12,7 +12,7 @@ function sendMenu(chatId, text) {
     parse_mode: "Markdown",
     reply_markup: {
       keyboard: [
-        [{ text: "🎱 Записать счёт" }],
+        [{ text: "🎱 Записать счёт" }, { text: "🕰 Задним числом" }],
         [{ text: "📊 Статистика" }, { text: "📋 Последние партии" }],
         [{ text: "📅 За месяц" }, { text: "🕐 За период" }],
         [{ text: "↩️ Отменить последнюю" }],
@@ -22,13 +22,22 @@ function sendMenu(chatId, text) {
   });
 }
 
+const CANCEL_KEYBOARD = {
+  keyboard: [[{ text: "❌ Отмена" }]],
+  resize_keyboard: true,
+};
+
 function askNumber(chatId, text) {
   bot.sendMessage(chatId, text, {
     parse_mode: "Markdown",
-    reply_markup: {
-      force_reply: true,
-      input_field_placeholder: "Введи число...",
-    },
+    reply_markup: CANCEL_KEYBOARD,
+  });
+}
+
+function askWithCancel(chatId, text) {
+  bot.sendMessage(chatId, text, {
+    parse_mode: "Markdown",
+    reply_markup: CANCEL_KEYBOARD,
   });
 }
 
@@ -63,21 +72,8 @@ bot.onText(/\/start/, (msg) => {
     return;
   }
 
-  // 2. Created a pair before (e.g. via import) but partner hasn't joined yet
-  const createdPair = db.getPairByCreator(uid);
-  if (createdPair) {
-    const theirName = createdPair.name2 || createdPair.username2 || "соперник";
-    sendMenu(
-      chatId,
-      `С возвращением, *${createdPair.name1}*! 🎱\n` +
-        (createdPair.name2
-          ? `Твой соперник: *${theirName}*`
-          : `Ожидаем, когда *${theirName}* запустит бота...`)
-    );
-    return;
-  }
-
-  // 3. Invited as partner (matched by uid or @username) → confirm name
+  // 2. Invited as partner (matched by uid or @username) → confirm name
+  // Check BEFORE "created pair" so an invited user isn't stuck in their own setup pair
   const pendingPair = db.getPendingPairForPartner(uid, username);
   if (pendingPair) {
     // Auto-fill name from Telegram profile, ask to confirm
@@ -87,6 +83,20 @@ bot.onText(/\/start/, (msg) => {
       `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\n` +
         `Тебя зовут *${telegramName}*? Отправь имя если хочешь изменить, или напиши *ок* чтобы продолжить.`,
       { parse_mode: "Markdown", reply_markup: { force_reply: true } }
+    );
+    return;
+  }
+
+  // 3. Created a pair before (e.g. via import) but partner hasn't joined yet
+  const createdPair = db.getPairByCreator(uid);
+  if (createdPair) {
+    const theirName = createdPair.name2 || createdPair.username2 || "соперник";
+    sendMenu(
+      chatId,
+      `С возвращением, *${createdPair.name1}*! 🎱\n` +
+        (createdPair.uid2
+          ? `Твой соперник: *${theirName}*`
+          : `Ожидаем, когда *${theirName}* запустит бота...`)
     );
     return;
   }
@@ -126,6 +136,12 @@ bot.on("message", (msg) => {
   const username = msg.from.username || null;
 
   if (text.startsWith("/")) return;
+
+  if (text === "❌ Отмена") {
+    clearState(chatId);
+    sendMenu(chatId, "Отменено.");
+    return;
+  }
 
   const { state, data } = getState(chatId);
 
@@ -250,6 +266,72 @@ bot.on("message", (msg) => {
     return;
   }
 
+  // ── FSM: Past record — date input ─────────────────────────────────────────────
+  if (state === "record_past_date") {
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      askWithCancel(chatId, "Не понял. Введи дату в формате `ГГГГ-ММ-ДД`, например `2026-01-15`:");
+      return;
+    }
+    const [, y, m, d] = match;
+    const date = new Date(`${y}-${m}-${d}T12:00:00.000Z`);
+    if (isNaN(date.getTime())) {
+      askWithCancel(chatId, "Некорректная дата. Попробуй ещё раз:");
+      return;
+    }
+    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
+    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
+    setState(chatId, "record_past_score1", { isoDate: date.toISOString() });
+    askNumber(chatId, `Дата: *${text}*\n\nСколько партий выиграл *${myName}*?`);
+    return;
+  }
+
+  // ── FSM: Past record — score1 ──────────────────────────────────────────────────
+  if (state === "record_past_score1") {
+    const n = parseInt(text);
+    if (isNaN(n) || n < 0 || n > 99) {
+      askNumber(chatId, "Введи корректное число от 0 до 99:");
+      return;
+    }
+    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
+    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
+    setState(chatId, "record_past_score2", { ...data, score_me: n });
+    askNumber(chatId, `Понял! Теперь — сколько партий выиграл *${theirName}*?`);
+    return;
+  }
+
+  // ── FSM: Past record — score2 ──────────────────────────────────────────────────
+  if (state === "record_past_score2") {
+    const n = parseInt(text);
+    if (isNaN(n) || n < 0 || n > 99) {
+      askNumber(chatId, "Введи корректное число от 0 до 99:");
+      return;
+    }
+    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
+    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
+    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
+    const scoreMe = data.score_me;
+    const scoreThem = n;
+    const score1 = pair.uid1 === uid ? scoreMe : scoreThem;
+    const score2 = pair.uid1 === uid ? scoreThem : scoreMe;
+
+    db.insertSession(pair.id, score1, score2, data.isoDate);
+    clearState(chatId);
+
+    const dateStr = data.isoDate.slice(0, 10);
+    const winner =
+      scoreMe > scoreThem ? `🏆 Победил *${myName}*!`
+      : scoreThem > scoreMe ? `🏆 Победил *${theirName}*!`
+      : "🤝 Ничья!";
+
+    sendMenu(
+      chatId,
+      `✅ Записано! ${dateStr}\n\n` +
+        `${myName} *${scoreMe}* — *${scoreThem}* ${theirName}\n\n${winner}`
+    );
+    return;
+  }
+
   // ── FSM: Period input ─────────────────────────────────────────────────────────
   if (state === "period_input") {
     handlePeriodInput(chatId, uid, text);
@@ -280,6 +362,12 @@ bot.on("message", (msg) => {
       break;
     }
 
+    case "🕰 Задним числом": {
+      setState(chatId, "record_past_date");
+      askWithCancel(chatId, `Введи дату в формате *ГГГГ-ММ-ДД*, например \`2026-03-01\`:`);
+      break;
+    }
+
     case "📊 Статистика": {
       const rows = db.getAllSessions(pair.id);
       bot.sendMessage(chatId, formatStats(rows, "Всё время", pair.name1, pair.name2 || "Соперник"), {
@@ -298,7 +386,7 @@ bot.on("message", (msg) => {
 
     case "📅 За месяц": {
       setState(chatId, "month_input");
-      forceReply(
+      askWithCancel(
         chatId,
         `За какой месяц?\n\nНапиши *текущий* или дату в формате *ГГГГ-ММ*, например \`2025-11\``
       );
@@ -307,7 +395,7 @@ bot.on("message", (msg) => {
 
     case "🕐 За период": {
       setState(chatId, "period_input");
-      forceReply(
+      askWithCancel(
         chatId,
         `За какой период?\n\n` +
           `\`3w\` — последние 3 недели\n` +

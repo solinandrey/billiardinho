@@ -87,7 +87,10 @@ if (!pair) {
   pair = db.prepare("SELECT * FROM pairs WHERE uid1 = ?").get(YOUR_TELEGRAM_ID);
   console.log(`✅ Пара создана: ${YOUR_NAME} & ${PARTNER_NAME}`);
 } else {
-  if (!pair.name2) {
+  // Only update name2 if the partner has already joined (uid2 set).
+  // If uid2 is null, the partner hasn't run /start yet — don't pre-fill name2
+  // or getPendingPairForPartner won't be able to match them when they join.
+  if (pair.uid2 && !pair.name2) {
     db.prepare("UPDATE pairs SET name2 = ? WHERE id = ?").run(PARTNER_NAME, pair.id);
     pair = db.prepare("SELECT * FROM pairs WHERE id = ?").get(pair.id);
   }

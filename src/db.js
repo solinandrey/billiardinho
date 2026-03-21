@@ -70,12 +70,13 @@ class BilliardDB {
     if (row) return row;
 
     // Try username match (case-insensitive, strip @)
+    // Use uid2 IS NULL — not name2 IS NULL — because import.js may pre-fill name2
     if (username) {
       const clean = username.replace(/^@/, "").toLowerCase();
       row = this.db
         .prepare(`
           SELECT * FROM pairs
-          WHERE LOWER(REPLACE(username2, '@', '')) = ? AND name2 IS NULL
+          WHERE LOWER(REPLACE(username2, '@', '')) = ? AND uid2 IS NULL
           ORDER BY id DESC LIMIT 1
         `)
         .get(clean);
