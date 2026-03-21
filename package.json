@@ -4,7 +4,7 @@
   "type": "module",
   "main": "src/bot.js",
   "scripts": {
-    "start": "node --env-file=.env src/bot.js",
+    "start": "node import.js && node src/bot.js",
     "dev": "node --watch --env-file=.env src/bot.js"
   },
   "dependencies": {
