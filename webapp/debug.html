@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; font-size: 13px; }
+    pre { background: #16213e; padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    h3 { color: #3390EC; margin-top: 16px; }
+    .ok  { color: #4ade80; }
+    .err { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h3>Telegram WebApp</h3>
+  <pre id="tg-info">loading...</pre>
+  <h3>/api/debug response</h3>
+  <pre id="api-info">loading...</pre>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) tg.ready();
+
+    const user = tg?.initDataUnsafe?.user;
+    document.getElementById('tg-info').textContent = JSON.stringify({
+      available: !!tg,
+      initData_len: tg?.initData?.length ?? 0,
+      user: user ? { id: user.id, first_name: user.first_name, username: user.username } : null,
+    }, null, 2);
+
+    fetch('/api/debug', {
+      headers: {
+        'X-User-Id': String(user?.id || 0),
+        'X-Init-Data': tg?.initData || '',
+      }
+    })
+    .then(r => r.json())
+    .then(d => { document.getElementById('api-info').textContent = JSON.stringify(d, null, 2); })
+    .catch(e => { document.getElementById('api-info').textContent = 'ERROR: ' + e.message; });
+  </script>
+</body>
+</html>
