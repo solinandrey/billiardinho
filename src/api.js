@@ -97,12 +97,16 @@ function handleApi(req, res, path) {
     const initData = req.headers['x-init-data'] || '';
     let parsedUser = null;
     try { parsedUser = JSON.parse(new URLSearchParams(initData).get('user')); } catch {}
+    const allPairs = db.db.prepare('SELECT id, uid1, uid2, name1, name2 FROM pairs').all();
+    const allSessions = db.db.prepare('SELECT COUNT(*) as cnt FROM sessions').get();
     return json({
       uid,
       x_user_id: req.headers['x-user-id'],
       init_data_len: initData.length,
       parsed_user: parsedUser,
       pairs_count: db.getAllPairsForUser(uid).length,
+      db_all_pairs: allPairs,
+      db_sessions_total: allSessions.cnt,
     });
   }
 
