@@ -16,6 +16,20 @@ const MIME = {
   '.svg': 'image/svg+xml',
 };
 
+// Parse user ID: initData (most reliable in prod) → X-User-Id header → DEV fallback
+function resolveUid(req) {
+  const initData = req.headers['x-init-data'];
+  if (initData) {
+    try {
+      const user = JSON.parse(new URLSearchParams(initData).get('user'));
+      if (user?.id) return user.id;
+    } catch { /* ignore */ }
+  }
+  const fromHeader = parseInt(req.headers['x-user-id']) || 0;
+  if (fromHeader) return fromHeader;
+  return process.env.DEV_USER_ID ? parseInt(process.env.DEV_USER_ID) : 0;
+}
+
 export function startApiServer(port = process.env.PORT || process.env.API_PORT || 3000) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost`);
@@ -58,8 +72,7 @@ export function startApiServer(port = process.env.PORT || process.env.API_PORT |
 
 // ── API handler ───────────────────────────────────────────────────────────────
 function handleApi(req, res, path) {
-  const rawUid = parseInt(req.headers['x-user-id']) || 0;
-  const uid = rawUid || (process.env.DEV_USER_ID ? parseInt(process.env.DEV_USER_ID) : 0);
+  const uid = resolveUid(req);
 
   const json = (data, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });

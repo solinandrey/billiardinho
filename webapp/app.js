@@ -129,7 +129,7 @@ function renderHome() {
     : (state.pairs.length ? getMyName(state.pairs[0]) : 'Игрок');
 
   const username = TG_USER?.username ? '@' + TG_USER.username : '';
-  document.getElementById('user-name').textContent     = tgName || '—';
+  document.getElementById('user-name').textContent     = tgName || (state.pairs.length ? getMyName(state.pairs[0]) : '—');
   document.getElementById('user-username').textContent = username;
 
   const photoEl    = document.getElementById('user-photo');
