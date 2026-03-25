@@ -58,7 +58,8 @@ export function startApiServer(port = process.env.PORT || process.env.API_PORT |
 
 // ── API handler ───────────────────────────────────────────────────────────────
 function handleApi(req, res, path) {
-  const uid = parseInt(req.headers['x-user-id']) || 0;
+  const rawUid = parseInt(req.headers['x-user-id']) || 0;
+  const uid = rawUid || (process.env.DEV_USER_ID ? parseInt(process.env.DEV_USER_ID) : 0);
 
   const json = (data, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });

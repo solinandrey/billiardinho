@@ -1,26 +1,16 @@
-// ── Telegram WebApp init ─────────────────────────────────────────────────────
+// ── Telegram WebApp ───────────────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
-if (tg) {
-  tg.ready();
-  tg.expand();
-  tg.setHeaderColor('#3390EC');
-}
+if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#3390EC'); }
+const TG_USER = tg?.initDataUnsafe?.user || null;
 
 // ── State ────────────────────────────────────────────────────────────────────
-let state = {
-  me: null,      // { uid, name }
-  pairs: [],     // [{ id, name1, name2, uid1, uid2 }]
-  sessions: [],  // [{ id, pair_id, score1, score2, played_at }]
-  activePairId: null,
-};
+let state = { pairs: [], sessions: [] };
+let navStack = []; // for back navigation
 
 // ── API ──────────────────────────────────────────────────────────────────────
-const API = '/api';
-
 async function apiFetch(path, opts = {}) {
-  const uid = tg?.initDataUnsafe?.user?.id || 0;
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', 'X-User-Id': uid },
+  const res = await fetch('/api' + path, {
+    headers: { 'Content-Type': 'application/json', 'X-User-Id': String(TG_USER?.id || 0), 'X-Init-Data': tg?.initData || '' },
     ...opts,
   });
   if (!res.ok) throw new Error(await res.text());
@@ -31,292 +21,406 @@ async function apiFetch(path, opts = {}) {
 async function boot() {
   try {
     const data = await apiFetch('/me');
-    state.me = data.me;
-    state.pairs = data.pairs;
-    state.sessions = data.sessions;
-    if (state.pairs.length > 0) state.activePairId = state.pairs[0].id;
-    renderAll();
-  } catch (e) {
-    // Fallback: show UI with empty data (for preview without backend)
-    renderAll();
-  }
-
-  // Set today as default date in Add form
+    state.pairs    = data.pairs    || [];
+    state.sessions = data.sessions || [];
+  } catch (e) { /* no backend */ }
   document.getElementById('add-date').value = todayISO();
+  renderAll();
 }
 
-// ── Routing ───────────────────────────────────────────────────────────────────
+// ── Player ID system ─────────────────────────────────────────────────────────
+// Assigns stable sequential IDs (#1, #2…) based on uid order in pairs table
+function buildPlayerMap() {
+  const map = new Map(); // uid → { name, id }
+  let counter = 1;
+  state.pairs.forEach(p => {
+    if (p.uid1 && !map.has(p.uid1)) map.set(p.uid1, { name: p.name1, uid: p.uid1, pid: counter++ });
+    if (p.uid2 && !map.has(p.uid2)) map.set(p.uid2, { name: p.name2, uid: p.uid2, pid: counter++ });
+  });
+  return map;
+}
+
+function getPlayerPid(uid) {
+  const m = buildPlayerMap();
+  return m.get(uid)?.pid ?? null;
+}
+
+function myUid()           { return TG_USER?.id || (state.pairs[0]?.uid1) || 0; }
+function isUid1(pair)      { return pair.uid1 === myUid(); }
+function getMyScore(s, p)  { return isUid1(p) ? s.score1 : s.score2; }
+function getOppScore(s, p) { return isUid1(p) ? s.score2 : s.score1; }
+function getMyName(p)      { return isUid1(p) ? p.name1 : p.name2; }
+function getOppName(p)     { return isUid1(p) ? (p.name2 || '?') : (p.name1 || '?'); }
+function getOppUid(p)      { return isUid1(p) ? p.uid2 : p.uid1; }
+function getPair(session)  { return state.pairs.find(p => p.id === session.pair_id); }
+
+function initials(name = '') {
+  return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function fmtDate(iso) {
+  const d = new Date(iso), now = new Date(), sec = Math.floor((now - d) / 1000);
+  if (sec < 60)     return 'только что';
+  if (sec < 3600)   return `${Math.floor(sec / 60)} мин. назад`;
+  if (sec < 86400)  return `${Math.floor(sec / 3600)} ч. назад`;
+  if (sec < 604800) return `${Math.floor(sec / 86400)} дн. назад`;
+  return d.toLocaleDateString('ru', { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+// ── Tab routing ───────────────────────────────────────────────────────────────
 let currentTab = 'home';
 
 function switchTab(tab) {
+  navStack = [];
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('screen-' + tab).classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   currentTab = tab;
-  if (tab === 'stats') renderStats();
 }
 
-// ── Render helpers ────────────────────────────────────────────────────────────
-function getOpponentName(pair) {
-  if (!state.me) return pair.name2 || pair.name1;
-  return pair.uid1 === state.me.uid ? (pair.name2 || '?') : (pair.name1 || '?');
+function pushScreen(screenId) {
+  navStack.push(document.querySelector('.screen.active')?.id || 'screen-home');
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
 }
 
-function getMyScore(session, pair) {
-  if (!state.me) return session.score1;
-  return pair.uid1 === state.me.uid ? session.score1 : session.score2;
+function goBack() {
+  const prev = navStack.pop();
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(prev || 'screen-home').classList.add('active');
 }
 
-function getOppScore(session, pair) {
-  if (!state.me) return session.score2;
-  return pair.uid1 === state.me.uid ? session.score2 : session.score1;
+// ── My stats ─────────────────────────────────────────────────────────────────
+function myStats() {
+  let total = 0, wins = 0;
+  state.pairs.forEach(pair => {
+    state.sessions.filter(s => s.pair_id === pair.id).forEach(s => {
+      total++;
+      if (getMyScore(s, pair) > getOppScore(s, pair)) wins++;
+    });
+  });
+  return { total, wins, winrate: total ? Math.round(wins / total * 100) : 0 };
 }
 
-function getPairForSession(session) {
-  return state.pairs.find(p => p.id === session.pair_id);
-}
-
-function relativeDate(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = Math.floor((now - d) / 1000);
-  if (diff < 60) return 'только что';
-  if (diff < 3600) return `${Math.floor(diff/60)} мин. назад`;
-  if (diff < 86400) return `${Math.floor(diff/3600)} ч. назад`;
-  if (diff < 604800) return `${Math.floor(diff/86400)} дн. назад`;
-  return d.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function initials(name = '?') {
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+// ── Global leaderboard ────────────────────────────────────────────────────────
+function leaderboard() {
+  const map = new Map(); // uid → { name, uid, wins, total }
+  state.pairs.forEach(pair => {
+    if (!pair.name1 || !pair.name2) return;
+    if (!map.has(pair.uid1)) map.set(pair.uid1, { name: pair.name1, uid: pair.uid1, wins: 0, total: 0 });
+    if (pair.uid2 && !map.has(pair.uid2)) map.set(pair.uid2, { name: pair.name2, uid: pair.uid2, wins: 0, total: 0 });
+    state.sessions.filter(s => s.pair_id === pair.id).forEach(s => {
+      map.get(pair.uid1).total++;
+      if (pair.uid2) map.get(pair.uid2).total++;
+      if (s.score1 > s.score2) map.get(pair.uid1).wins++;
+      else if (pair.uid2) map.get(pair.uid2).wins++;
+    });
+  });
+  return [...map.values()]
+    .map(p => ({ ...p, wr: p.total ? p.wins / p.total * 100 : 0 }))
+    .sort((a, b) => b.wr - a.wr || b.wins - a.wins);
 }
 
 // ── Render: Home ─────────────────────────────────────────────────────────────
 function renderHome() {
-  // Stats
-  const totalGames = state.sessions.length;
-  const playerSet = new Set();
-  state.pairs.forEach(p => { if (p.name1) playerSet.add(p.name1); if (p.name2) playerSet.add(p.name2); });
+  const tgName = TG_USER
+    ? [TG_USER.first_name, TG_USER.last_name].filter(Boolean).join(' ')
+    : (state.pairs.length ? getMyName(state.pairs[0]) : 'Игрок');
 
-  // Best winrate among all players
-  const players = computePlayers();
-  const best = players.length > 0 ? Math.round(players[0].winrate) : 0;
+  const username = TG_USER?.username ? '@' + TG_USER.username : '';
+  document.getElementById('user-name').textContent     = tgName || '—';
+  document.getElementById('user-username').textContent = username;
 
-  document.getElementById('stat-games').textContent = totalGames || '0';
-  document.getElementById('stat-players').textContent = playerSet.size || '0';
-  document.getElementById('stat-best').textContent = best ? best + '%' : '—';
-
-  // Top players (max 3)
-  const topEl = document.getElementById('top-players');
-  const top3 = players.slice(0, 3);
-  if (top3.length === 0) {
-    topEl.innerHTML = emptyState('🏆', 'Сыграйте первую игру!');
+  const photoEl    = document.getElementById('user-photo');
+  const initialsEl = document.getElementById('user-initials');
+  initialsEl.textContent = initials(tgName);
+  if (TG_USER?.photo_url) {
+    photoEl.src = TG_USER.photo_url; photoEl.style.display = 'block'; initialsEl.style.display = 'none';
   } else {
-    topEl.innerHTML = top3.map((p, i) => playerCardHTML(p, i === 0)).join('');
+    photoEl.style.display = 'none'; initialsEl.style.display = 'flex';
   }
 
-  // Recent games (max 5)
-  const recentEl = document.getElementById('recent-games');
-  const recent = [...state.sessions].sort((a,b) => b.played_at.localeCompare(a.played_at)).slice(0, 5);
-  if (recent.length === 0) {
-    recentEl.innerHTML = emptyState('🎱', 'Ещё нет записанных игр');
-  } else {
-    recentEl.innerHTML = recent.map(s => gameCardHTML(s)).join('');
-  }
+  const { total, wins, winrate } = myStats();
+  document.getElementById('stat-games').textContent   = total || '0';
+  document.getElementById('stat-wins').textContent    = wins  || '0';
+  document.getElementById('stat-winrate').textContent = total ? winrate + '%' : '—';
+
+  const el     = document.getElementById('recent-games');
+  const recent = [...state.sessions].sort((a, b) => b.played_at.localeCompare(a.played_at)).slice(0, 10);
+  el.innerHTML = recent.length
+    ? recent.map(s => gameCardHTML(s, true)).join('')
+    : emptyState('🎱', 'Ещё нет записанных игр.<br>Нажми + чтобы добавить.');
 }
 
 // ── Render: Players ───────────────────────────────────────────────────────────
 function renderPlayers() {
-  const players = computePlayers();
-  const el = document.getElementById('all-players');
-  if (players.length === 0) {
-    el.innerHTML = emptyState('👥', 'Пока нет игроков');
-    return;
-  }
-  el.innerHTML = players.map((p, i) => playerCardHTML(p, i === 0)).join('');
+  const board = leaderboard();
+  const el    = document.getElementById('all-players');
+  const pmap  = buildPlayerMap();
+
+  if (!board.length) { el.innerHTML = emptyState('🏆', 'Ещё нет данных'); return; }
+
+  el.innerHTML = board.map((p, i) => {
+    const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span style="font-size:13px;color:var(--text-secondary)">${i + 1}</span>`;
+    const pid = pmap.get(p.uid)?.pid;
+    return `
+      <div class="player-card" onclick="openPlayerProfile(${p.uid})">
+        <div class="player-rank">${rankIcon}</div>
+        <div class="player-avatar">${initials(p.name)}</div>
+        <div class="player-info">
+          <div class="player-name-row">
+            <span class="player-name">${p.name}</span>
+            ${pid ? `<span class="player-pid">#${pid}</span>` : ''}
+          </div>
+          <div class="player-sub">${p.wins} побед из ${p.total} игр</div>
+        </div>
+        <div class="player-winrate">
+          <div class="winrate-num">${Math.round(p.wr)}%</div>
+          <div class="winrate-label">винрейт</div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ── Render: Add form ──────────────────────────────────────────────────────────
+let _selectPairs    = [];
+let _selectedPairId = null;
+
 function renderAddForm() {
-  const sel = document.getElementById('add-opponent');
-  sel.innerHTML = '<option value="">Выбери соперника...</option>';
+  _selectPairs = state.pairs;
+  _selectedPairId = null;
+  document.getElementById('add-opponent').value = '';
+  const disp = document.getElementById('opponent-display');
+  disp.textContent = 'Выбери соперника...';
+  disp.className   = 'custom-select-placeholder';
 
-  const myName = state.me ? (state.pairs.find(p => p.uid1 === state.me?.uid)?.name1 || state.pairs.find(p => p.uid2 === state.me?.uid)?.name2) : null;
+  // My name label
+  const myName = state.pairs.length ? getMyName(state.pairs[0]) : 'Я';
+  document.getElementById('score-label-me').textContent = myName;
+  document.getElementById('score-label-opp').textContent = 'Соперник';
 
-  state.pairs.forEach(p => {
-    const oppName = getOpponentName(p);
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = oppName;
-    sel.appendChild(opt);
-  });
-
-  if (myName) {
-    document.getElementById('add-my-label').textContent = myName;
-  }
+  renderOpponentList('');
 }
 
-// ── Render: Stats ─────────────────────────────────────────────────────────────
-function renderStats() {
-  const tabsEl = document.getElementById('pair-tabs');
-  const contentEl = document.getElementById('stats-content');
+function renderOpponentList(query) {
+  const list = document.getElementById('opponent-list');
+  const q    = query.toLowerCase().trim();
+  const pmap = buildPlayerMap();
 
-  if (state.pairs.length === 0) {
-    tabsEl.innerHTML = '';
-    contentEl.innerHTML = emptyState('📊', 'Нет данных для статистики');
-    return;
-  }
+  const filtered = _selectPairs.filter(p => {
+    const name = getOppName(p).toLowerCase();
+    const uid  = getOppUid(p);
+    const pid  = pmap.get(uid)?.pid;
+    return name.includes(q) || (pid && String(pid).includes(q));
+  });
 
-  // Pair tabs
-  tabsEl.innerHTML = state.pairs.map(p => {
-    const opp = getOpponentName(p);
-    const active = p.id === state.activePairId ? 'active' : '';
-    return `<button class="pair-tab ${active}" onclick="selectPair(${p.id})">${opp}</button>`;
-  }).join('');
+  if (!filtered.length) { list.innerHTML = `<div class="custom-select-empty">Не найдено</div>`; return; }
 
-  // Stats for active pair
-  const pair = state.pairs.find(p => p.id === state.activePairId);
-  if (!pair) { contentEl.innerHTML = ''; return; }
-
-  const sessions = state.sessions.filter(s => s.pair_id === pair.id);
-  const myWins = sessions.filter(s => getMyScore(s, pair) > getOppScore(s, pair)).length;
-  const oppWins = sessions.length - myWins;
-  const myAvg = sessions.length ? (sessions.reduce((a,s) => a + getMyScore(s, pair), 0) / sessions.length).toFixed(1) : '—';
-  const oppAvg = sessions.length ? (sessions.reduce((a,s) => a + getOppScore(s, pair), 0) / sessions.length).toFixed(1) : '—';
-  const winrate = sessions.length ? Math.round(myWins / sessions.length * 100) : 0;
-
-  const myName = state.me ? (pair.uid1 === state.me.uid ? pair.name1 : pair.name2) : pair.name1;
-  const oppName = getOpponentName(pair);
-
-  contentEl.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
-      <div class="stats-big-card">
-        <div class="stats-vs">
-          <div class="stats-vs-player">
-            <div class="stats-vs-name">${myName || 'Я'}</div>
-            <div class="stats-vs-num">${myWins}</div>
-            <div class="stats-vs-label">побед</div>
-          </div>
-          <div class="stats-vs-divider">vs</div>
-          <div class="stats-vs-player">
-            <div class="stats-vs-name">${oppName}</div>
-            <div class="stats-vs-num">${oppWins}</div>
-            <div class="stats-vs-label">побед</div>
-          </div>
-        </div>
-        <div class="stats-divider"></div>
-        <div class="stats-grid">
-          <div class="stats-item">
-            <div class="stats-item-num">${sessions.length}</div>
-            <div class="stats-item-label">Всего игр</div>
-          </div>
-          <div class="stats-item">
-            <div class="stats-item-num">${winrate}%</div>
-            <div class="stats-item-label">Мой винрейт</div>
-          </div>
-          <div class="stats-item">
-            <div class="stats-item-num">${myAvg}</div>
-            <div class="stats-item-label">Мои шары / игра</div>
-          </div>
-          <div class="stats-item">
-            <div class="stats-item-num">${oppAvg}</div>
-            <div class="stats-item-label">Его шары / игра</div>
-          </div>
+  list.innerHTML = filtered.map(p => {
+    const oppName = getOppName(p);
+    const oppUid  = getOppUid(p);
+    const pid     = pmap.get(oppUid)?.pid;
+    const isActive = p.id === _selectedPairId;
+    return `
+      <div class="custom-select-option ${isActive ? 'active' : ''}" onclick="selectOpponent(${p.id}, '${oppName}')">
+        <div class="select-opt-avatar">${initials(oppName)}</div>
+        <div class="select-opt-info">
+          <span class="select-opt-name">${oppName}</span>
+          ${pid ? `<span class="select-opt-pid">#${pid}</span>` : ''}
         </div>
       </div>
-
-      ${sessions.length > 0 ? `
-        <div class="section">
-          <div class="section-header">
-            <div class="section-title-row">
-              <span class="section-icon">📋</span>
-              <span class="section-title">История игр</span>
-            </div>
-          </div>
-          <div class="card-list">
-            ${[...sessions].sort((a,b) => b.played_at.localeCompare(a.played_at)).map(s => gameCardHTML(s)).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
+    `;
+  }).join('');
 }
 
-function selectPair(id) {
-  state.activePairId = id;
-  renderStats();
+function filterOpponents(query) { renderOpponentList(query); }
+
+function toggleSelect() {
+  const wrap   = document.getElementById('opponent-select');
+  const isOpen = wrap.classList.contains('open');
+  if (isOpen) { closeSelect(); return; }
+  wrap.classList.add('open');
+  document.getElementById('opponent-search').value = '';
+  renderOpponentList('');
+  setTimeout(() => document.getElementById('opponent-search').focus(), 50);
 }
 
-// ── Compute players leaderboard ───────────────────────────────────────────────
-function computePlayers() {
-  const map = new Map(); // name → { wins, total }
+function closeSelect() { document.getElementById('opponent-select').classList.remove('open'); }
 
-  state.pairs.forEach(pair => {
-    const sessions = state.sessions.filter(s => s.pair_id === pair.id);
-    sessions.forEach(s => {
-      const n1 = pair.name1, n2 = pair.name2;
-      if (!n1 || !n2) return;
-      const p1wins = s.score1 > s.score2;
+function selectOpponent(pairId, name) {
+  _selectedPairId = pairId;
+  document.getElementById('add-opponent').value = pairId;
+  const disp = document.getElementById('opponent-display');
+  disp.textContent = name;
+  disp.className   = 'custom-select-value';
+  document.getElementById('score-label-opp').textContent = name;
+  closeSelect();
+}
 
-      if (!map.has(n1)) map.set(n1, { wins: 0, total: 0, balls: 0 });
-      if (!map.has(n2)) map.set(n2, { wins: 0, total: 0, balls: 0 });
+document.addEventListener('click', e => {
+  if (!document.getElementById('opponent-select')?.contains(e.target)) closeSelect();
+});
 
-      const p1 = map.get(n1), p2 = map.get(n2);
-      p1.total++; p2.total++;
-      p1.balls += s.score1; p2.balls += s.score2;
-      if (p1wins) p1.wins++; else p2.wins++;
-    });
+// ── Player profile ────────────────────────────────────────────────────────────
+function openPlayerProfile(uid) {
+  if (uid === myUid()) { openMyProfile(); return; }
+
+  // Find this player across pairs
+  const pairs = state.pairs.filter(p => p.uid1 === uid || p.uid2 === uid);
+  const isUid1ForPlayer = (pair) => pair.uid1 === uid;
+  const getName = (pair) => isUid1ForPlayer(pair) ? pair.name1 : pair.name2;
+
+  const name    = pairs.length ? getName(pairs[0]) : '?';
+  const pid     = getPlayerPid(uid);
+  const allSessions = state.sessions.filter(s => pairs.some(p => p.id === s.pair_id));
+
+  let total = 0, wins = 0;
+  allSessions.forEach(s => {
+    const pair = pairs.find(p => p.id === s.pair_id);
+    total++;
+    const myS = isUid1ForPlayer(pair) ? s.score1 : s.score2;
+    const oppS = isUid1ForPlayer(pair) ? s.score2 : s.score1;
+    if (myS > oppS) wins++;
   });
+  const wr = total ? Math.round(wins / total * 100) : 0;
 
-  return [...map.entries()]
-    .map(([name, d]) => ({ name, wins: d.wins, total: d.total, winrate: d.total ? d.wins / d.total * 100 : 0 }))
-    .sort((a, b) => b.winrate - a.winrate || b.wins - a.wins);
+  document.getElementById('player-avatar-lg').textContent = initials(name);
+  document.getElementById('player-profile-name').textContent = name;
+  document.getElementById('player-profile-id').textContent  = pid ? `#${pid}` : '';
+  document.getElementById('player-stat-games').textContent  = total || '0';
+  document.getElementById('player-stat-wins').textContent   = wins  || '0';
+  document.getElementById('player-stat-wr').textContent     = total ? wr + '%' : '—';
+
+  const recent = [...allSessions].sort((a, b) => b.played_at.localeCompare(a.played_at));
+
+  document.getElementById('player-profile-content').innerHTML = recent.length
+    ? `<div class="section"><div class="section-header"><div class="section-title-row"><span class="section-icon">📋</span><span class="section-title">История игр</span></div></div><div class="card-list">${recent.map(s => gameCardHTMLFromPerspective(s, uid)).join('')}</div></div>`
+    : emptyState('🎱', 'Нет игр');
+
+  pushScreen('screen-player');
+}
+
+function openMyProfile() {
+  const uid  = myUid();
+  const tgName = TG_USER
+    ? [TG_USER.first_name, TG_USER.last_name].filter(Boolean).join(' ')
+    : (state.pairs.length ? getMyName(state.pairs[0]) : 'Игрок');
+  const pid  = getPlayerPid(uid);
+  const { total, wins, winrate } = myStats();
+
+  // Avatar
+  const photoEl    = document.getElementById('my-profile-photo');
+  const initialsEl = document.getElementById('my-profile-initials');
+  initialsEl.textContent = initials(tgName);
+  if (TG_USER?.photo_url) {
+    photoEl.src = TG_USER.photo_url; photoEl.style.display = 'block'; initialsEl.style.display = 'none';
+  } else {
+    photoEl.style.display = 'none'; initialsEl.style.display = 'flex';
+  }
+
+  document.getElementById('my-profile-name').textContent = tgName;
+  document.getElementById('my-profile-id').textContent   = pid ? `#${pid}` : '';
+  document.getElementById('my-stat-games').textContent   = total || '0';
+  document.getElementById('my-stat-wins').textContent    = wins  || '0';
+  document.getElementById('my-stat-wr').textContent      = total ? winrate + '%' : '—';
+
+  // Per-opponent breakdown + recent games
+  const opponentsHTML = state.pairs.map(pair => {
+    const sessions = state.sessions.filter(s => s.pair_id === pair.id);
+    const myW  = sessions.filter(s => getMyScore(s, pair) > getOppScore(s, pair)).length;
+    const wr2  = sessions.length ? Math.round(myW / sessions.length * 100) : 0;
+    const oppName = getOppName(pair);
+    const oppUid  = getOppUid(pair);
+    const pmap = buildPlayerMap();
+    const oppPid = pmap.get(oppUid)?.pid;
+    return `
+      <div class="player-card" onclick="openPlayerProfile(${oppUid})">
+        <div class="player-avatar">${initials(oppName)}</div>
+        <div class="player-info">
+          <div class="player-name-row">
+            <span class="player-name">${oppName}</span>
+            ${oppPid ? `<span class="player-pid">#${oppPid}</span>` : ''}
+          </div>
+          <div class="player-sub">${myW} побед из ${sessions.length} игр</div>
+        </div>
+        <div class="player-winrate">
+          <div class="winrate-num">${wr2}%</div>
+          <div class="winrate-label">мой %</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const recent = [...state.sessions].sort((a, b) => b.played_at.localeCompare(a.played_at));
+
+  document.getElementById('my-profile-content').innerHTML = `
+    ${state.pairs.length ? `
+      <div class="section">
+        <div class="section-header"><div class="section-title-row"><span class="section-icon">⚔️</span><span class="section-title">Соперники</span></div></div>
+        <div class="card-list">${opponentsHTML}</div>
+      </div>` : ''}
+    ${recent.length ? `
+      <div class="section">
+        <div class="section-header"><div class="section-title-row"><span class="section-icon">📋</span><span class="section-title">Все игры</span></div></div>
+        <div class="card-list">${recent.map(s => gameCardHTML(s, true)).join('')}</div>
+      </div>` : ''}
+  `;
+
+  pushScreen('screen-myprofile');
 }
 
 // ── HTML builders ─────────────────────────────────────────────────────────────
-function playerCardHTML(p, isFirst) {
+function gameCardHTML(session, clickable = false) {
+  const pair = getPair(session);
+  if (!pair) return '';
+  const myS = getMyScore(session, pair), oppS = getOppScore(session, pair);
+  const myName = getMyName(pair) || 'Я', oppName = getOppName(pair);
+  const iWon = myS > oppS, isDraw = myS === oppS;
+  const resultClass = isDraw ? 'draw' : iWon ? 'win' : 'lose';
+  const resultText  = isDraw ? 'Ничья' : iWon ? 'Победа' : 'Поражение';
   return `
-    <div class="player-card">
-      <div class="player-avatar">
-        ${initials(p.name)}
-        ${isFirst ? '<span class="crown-badge">👑</span>' : ''}
+    <div class="game-card clickable" onclick="openGameDetail(${session.id})">
+      <div class="game-meta">
+        <span class="game-date">${fmtDate(session.played_at)}</span>
+        <span class="game-result ${resultClass}">${resultText}</span>
       </div>
-      <div class="player-info">
-        <div class="player-name">${p.name}</div>
-        <div class="player-sub">${p.wins} побед из ${p.total} игр</div>
-      </div>
-      <div class="player-winrate">
-        <div class="winrate-num">${Math.round(p.winrate)}%</div>
-        <div class="winrate-label">винрейт</div>
+      <div class="game-score-row">
+        <div class="game-player">${myName}</div>
+        <div class="game-score">
+          <span class="${iWon ? 'score-win' : 'score-lose'}">${myS}</span>
+          <span style="color:var(--text-secondary)">:</span>
+          <span class="${!iWon ? 'score-win' : 'score-lose'}">${oppS}</span>
+        </div>
+        <div class="game-player right">${oppName}</div>
       </div>
     </div>
   `;
 }
 
-function gameCardHTML(session) {
-  const pair = getPairForSession(session);
+function gameCardHTMLFromPerspective(session, uid) {
+  const pair = getPair(session);
   if (!pair) return '';
-  const myS = getMyScore(session, pair);
-  const oppS = getOppScore(session, pair);
-  const myName = state.me ? (pair.uid1 === state.me.uid ? pair.name1 : pair.name2) : pair.name1;
-  const oppName = getOpponentName(pair);
-  const iWon = myS > oppS;
+  const isP1 = pair.uid1 === uid;
+  const myS  = isP1 ? session.score1 : session.score2;
+  const oppS = isP1 ? session.score2 : session.score1;
+  const myName  = isP1 ? pair.name1 : pair.name2;
+  const oppName = isP1 ? pair.name2 : pair.name1;
+  const iWon = myS > oppS, isDraw = myS === oppS;
+  const resultClass = isDraw ? 'draw' : iWon ? 'win' : 'lose';
+  const resultText  = isDraw ? 'Ничья' : iWon ? 'Победа' : 'Поражение';
   return `
-    <div class="game-card">
+    <div class="game-card clickable" onclick="openGameDetail(${session.id})">
       <div class="game-meta">
-        <span class="game-date">${relativeDate(session.played_at)}</span>
-        <span class="game-type">🎱 Бильярд</span>
+        <span class="game-date">${fmtDate(session.played_at)}</span>
+        <span class="game-result ${resultClass}">${resultText}</span>
       </div>
       <div class="game-score-row">
-        <div class="game-player">${myName || 'Я'}</div>
+        <div class="game-player">${myName}</div>
         <div class="game-score">
           <span class="${iWon ? 'score-win' : 'score-lose'}">${myS}</span>
-          <span style="color:var(--text-secondary)"> : </span>
+          <span style="color:var(--text-secondary)">:</span>
           <span class="${!iWon ? 'score-win' : 'score-lose'}">${oppS}</span>
         </div>
         <div class="game-player right">${oppName}</div>
@@ -329,21 +433,63 @@ function emptyState(icon, text) {
   return `<div class="empty-state"><div class="empty-state-icon">${icon}</div>${text}</div>`;
 }
 
+// ── Game detail ───────────────────────────────────────────────────────────────
+function openGameDetail(sessionId) {
+  const session = state.sessions.find(s => s.id === sessionId);
+  if (!session) return;
+  const pair = getPair(session);
+  if (!pair) return;
+
+  const myS  = getMyScore(session, pair);
+  const oppS = getOppScore(session, pair);
+  const myName  = getMyName(pair)  || 'Я';
+  const oppName = getOppName(pair) || '?';
+  const iWon  = myS  > oppS;
+  const isDraw = myS === oppS;
+
+  // Header color & result text
+  const header = document.getElementById('game-detail-header');
+  header.className = 'game-detail-header ' + (isDraw ? 'draw' : iWon ? 'win' : 'lose');
+
+  document.getElementById('game-detail-result').textContent =
+    isDraw ? 'Ничья' : iWon ? '🏆 Победа' : 'Поражение';
+
+  document.getElementById('game-detail-date').textContent =
+    new Date(session.played_at).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+
+  // Score — winner's number in blue
+  const s1Class = iWon  ? 'ds-win' : isDraw ? '' : 'ds-lose';
+  const s2Class = !iWon ? 'ds-win' : isDraw ? '' : 'ds-lose';
+  document.getElementById('game-detail-score').innerHTML =
+    `<span class="${s1Class}">${myS}</span><span class="ds-sep">:</span><span class="${s2Class}">${oppS}</span>`;
+
+  // Players
+  document.getElementById('game-detail-av1').textContent = initials(myName);
+  document.getElementById('game-detail-n1').textContent  = myName;
+  document.getElementById('game-detail-av2').textContent = initials(oppName);
+  document.getElementById('game-detail-n2').textContent  = oppName;
+
+  // Highlight winner avatar
+  document.getElementById('game-detail-av1').className = 'game-detail-avatar' + (iWon  ? ' winner' : isDraw ? '' : ' loser');
+  document.getElementById('game-detail-av2').className = 'game-detail-avatar' + (!iWon ? ' winner' : isDraw ? '' : ' loser');
+
+  pushScreen('screen-game');
+}
+
 // ── Submit game ───────────────────────────────────────────────────────────────
 async function submitGame() {
-  const pairId = parseInt(document.getElementById('add-opponent').value);
-  const scoreMe = parseInt(document.getElementById('add-score-me').value);
+  const pairId   = parseInt(document.getElementById('add-opponent').value);
+  const scoreMe  = parseInt(document.getElementById('add-score-me').value);
   const scoreOpp = parseInt(document.getElementById('add-score-opp').value);
-  const date = document.getElementById('add-date').value;
+  const date     = document.getElementById('add-date').value;
 
-  if (!pairId) return showToast('Выбери соперника');
+  if (!pairId)                            return showToast('Выбери соперника');
   if (isNaN(scoreMe) || isNaN(scoreOpp)) return showToast('Введи счёт');
-  if (!date) return showToast('Укажи дату');
+  if (!date)                              return showToast('Укажи дату');
 
-  const pair = state.pairs.find(p => p.id === pairId);
-  const isUid1 = !state.me || pair.uid1 === state.me.uid;
-  const score1 = isUid1 ? scoreMe : scoreOpp;
-  const score2 = isUid1 ? scoreOpp : scoreMe;
+  const pair   = state.pairs.find(p => p.id === pairId);
+  const score1 = isUid1(pair) ? scoreMe : scoreOpp;
+  const score2 = isUid1(pair) ? scoreOpp : scoreMe;
 
   try {
     const result = await apiFetch('/session', {
@@ -352,38 +498,24 @@ async function submitGame() {
     });
     state.sessions.push(result.session);
     showToast('✅ Игра записана!');
-
-    // Reset form
-    document.getElementById('add-score-me').value = '';
+    document.getElementById('add-score-me').value  = '';
     document.getElementById('add-score-opp').value = '';
-    document.getElementById('add-date').value = todayISO();
-
+    document.getElementById('add-date').value       = todayISO();
     renderAll();
-    setTimeout(() => switchTab('home'), 800);
-  } catch (e) {
-    showToast('Ошибка: ' + e.message);
-  }
+    setTimeout(() => switchTab('home'), 700);
+  } catch (e) { showToast('Ошибка: ' + e.message); }
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function showToast(msg) {
   let el = document.querySelector('.toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.className = 'toast';
-    document.body.appendChild(el);
-  }
+  if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 // ── Render all ────────────────────────────────────────────────────────────────
-function renderAll() {
-  renderHome();
-  renderPlayers();
-  renderAddForm();
-}
+function renderAll() { renderHome(); renderPlayers(); renderAddForm(); }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
 boot();
