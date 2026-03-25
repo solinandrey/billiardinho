@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Бильярд Клуб</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── HOME ───────────────────────────────────────── -->
+    <div class="screen active" id="screen-home">
+      <div class="header-card">
+        <div class="header-inner">
+          <div class="header-icon">🎱</div>
+          <div>
+            <div class="header-title">Добро пожаловать!</div>
+            <div class="header-sub">Следите за своими победами</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="stats-row" id="home-stats">
+          <div class="stat-card">
+            <div class="stat-num" id="stat-games">—</div>
+            <div class="stat-label">Всего игр</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-players">—</div>
+            <div class="stat-label">Игроков</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-best">—</div>
+            <div class="stat-label">Лучший %</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title-row">
+              <span class="section-icon">🏆</span>
+              <span class="section-title">Лучшие игроки</span>
+            </div>
+            <button class="link-btn" onclick="switchTab('players')">Все</button>
+          </div>
+          <div class="card-list" id="top-players"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title-row">
+              <span class="section-icon">📋</span>
+              <span class="section-title">Последние игры</span>
+            </div>
+          </div>
+          <div class="card-list" id="recent-games"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PLAYERS ─────────────────────────────────────── -->
+    <div class="screen" id="screen-players">
+      <div class="page-header">
+        <h1 class="page-title">Игроки</h1>
+      </div>
+      <div class="content">
+        <div class="card-list" id="all-players"></div>
+      </div>
+    </div>
+
+    <!-- ── ADD GAME ────────────────────────────────────── -->
+    <div class="screen" id="screen-add">
+      <div class="page-header">
+        <h1 class="page-title">Добавить игру</h1>
+      </div>
+      <div class="content">
+        <div class="form-card">
+          <div class="form-group">
+            <label class="form-label">Соперник</label>
+            <select class="form-select" id="add-opponent">
+              <option value="">Выбери соперника...</option>
+            </select>
+          </div>
+
+          <div class="score-row">
+            <div class="form-group score-group">
+              <label class="form-label" id="add-my-label">Мои шары</label>
+              <input class="score-input" type="number" id="add-score-me" min="0" max="30" placeholder="0" />
+            </div>
+            <div class="score-divider">:</div>
+            <div class="form-group score-group">
+              <label class="form-label" id="add-opp-label">Его шары</label>
+              <input class="score-input" type="number" id="add-score-opp" min="0" max="30" placeholder="0" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Дата</label>
+            <input class="form-input" type="date" id="add-date" />
+          </div>
+
+          <button class="primary-btn" id="add-submit" onclick="submitGame()">
+            Записать игру
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STATS ───────────────────────────────────────── -->
+    <div class="screen" id="screen-stats">
+      <div class="page-header">
+        <h1 class="page-title">Статистика</h1>
+      </div>
+      <div class="content">
+        <div class="stat-pair-selector" id="pair-tabs"></div>
+        <div id="stats-content"></div>
+      </div>
+    </div>
+
+    <!-- ── BOTTOM NAV ─────────────────────────────────── -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchTab('home')" data-tab="home">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Главная</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('players')" data-tab="players">
+        <span class="nav-icon">👥</span>
+        <span class="nav-label">Игроки</span>
+      </button>
+      <button class="nav-item nav-add" onclick="switchTab('add')" data-tab="add">
+        <span class="nav-icon-add">+</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('stats')" data-tab="stats">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Статистика</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

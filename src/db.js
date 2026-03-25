@@ -157,6 +157,19 @@ class BilliardDB {
       .all(pairId, from, toDate.toISOString());
   }
 
+  getAllPairsForUser(uid) {
+    return this.db
+      .prepare(`SELECT * FROM pairs WHERE uid1 = ? OR uid2 = ? ORDER BY id DESC`)
+      .all(uid, uid);
+  }
+
+  getSessionsForPairs(pairIds) {
+    const placeholders = pairIds.map(() => '?').join(',');
+    return this.db
+      .prepare(`SELECT * FROM sessions WHERE pair_id IN (${placeholders}) ORDER BY played_at ASC`)
+      .all(...pairIds);
+  }
+
   deleteLastSession(pairId) {
     const last = this.db
       .prepare("SELECT * FROM sessions WHERE pair_id = ? ORDER BY id DESC LIMIT 1")

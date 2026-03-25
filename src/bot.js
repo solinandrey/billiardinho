@@ -2,23 +2,29 @@ import TelegramBot from "node-telegram-bot-api";
 import { db } from "./db.js";
 import { formatStats, formatSessions } from "./formatter.js";
 import { getState, setState, clearState } from "./fsm.js";
+import { startApiServer } from "./api.js";
+
+startApiServer();
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function sendMenu(chatId, text) {
+  const keyboard = [
+    [{ text: "🎱 Записать счёт" }, { text: "🕰 Задним числом" }],
+    [{ text: "📊 Статистика" }, { text: "📋 Последние партии" }],
+    [{ text: "📅 За месяц" }, { text: "🕐 За период" }],
+    [{ text: "↩️ Отменить последнюю" }],
+  ];
+
+  if (process.env.WEBAPP_URL) {
+    keyboard.unshift([{ text: "🌐 Открыть Mini App", web_app: { url: process.env.WEBAPP_URL } }]);
+  }
+
   bot.sendMessage(chatId, text, {
     parse_mode: "Markdown",
-    reply_markup: {
-      keyboard: [
-        [{ text: "🎱 Записать счёт" }, { text: "🕰 Задним числом" }],
-        [{ text: "📊 Статистика" }, { text: "📋 Последние партии" }],
-        [{ text: "📅 За месяц" }, { text: "🕐 За период" }],
-        [{ text: "↩️ Отменить последнюю" }],
-      ],
-      resize_keyboard: true,
-    },
+    reply_markup: { keyboard, resize_keyboard: true },
   });
 }
 
