@@ -36,7 +36,9 @@ export function startApiServer(port = process.env.PORT || process.env.API_PORT |
     const pathname = url.pathname;
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Id');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Id, X-Init-Data');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
     // ── API routes ────────────────────────────────────────────────────────────
     if (pathname.startsWith('/api')) {
@@ -89,6 +91,20 @@ function handleApi(req, res, path) {
     req.on('data', c => raw += c);
     req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve({}); } });
   });
+
+  // GET /api/debug — diagnose auth
+  if (path === '/debug' && req.method === 'GET') {
+    const initData = req.headers['x-init-data'] || '';
+    let parsedUser = null;
+    try { parsedUser = JSON.parse(new URLSearchParams(initData).get('user')); } catch {}
+    return json({
+      uid,
+      x_user_id: req.headers['x-user-id'],
+      init_data_len: initData.length,
+      parsed_user: parsedUser,
+      pairs_count: db.getAllPairsForUser(uid).length,
+    });
+  }
 
   // GET /api/me — all data for current user
   if (path === '/me' && req.method === 'GET') {
