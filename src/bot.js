@@ -19,7 +19,9 @@ function sendMenu(chatId, text) {
   ];
 
   if (process.env.WEBAPP_URL) {
-    keyboard.unshift([{ text: "🌐 Открыть Mini App", web_app: { url: process.env.WEBAPP_URL } }]);
+    // Pass uid in URL — Telegram doesn't always provide initData for web_app buttons
+    const webAppUrl = `${process.env.WEBAPP_URL}?uid=${chatId}`;
+    keyboard.unshift([{ text: "🌐 Открыть Mini App", web_app: { url: webAppUrl } }]);
   }
 
   bot.sendMessage(chatId, text, {

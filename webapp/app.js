@@ -2,6 +2,8 @@
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#3390EC'); }
 const TG_USER = tg?.initDataUnsafe?.user || null;
+// Fallback: uid passed by bot in URL param when initData is unavailable
+const URL_UID = parseInt(new URLSearchParams(location.search).get('uid')) || 0;
 
 // ── State ────────────────────────────────────────────────────────────────────
 let state = { pairs: [], sessions: [] };
@@ -10,7 +12,7 @@ let navStack = []; // for back navigation
 // ── API ──────────────────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
   const res = await fetch('/api' + path, {
-    headers: { 'Content-Type': 'application/json', 'X-User-Id': String(TG_USER?.id || 0), 'X-Init-Data': tg?.initData || '' },
+    headers: { 'Content-Type': 'application/json', 'X-User-Id': String(TG_USER?.id || URL_UID || 0), 'X-Init-Data': tg?.initData || '' },
     ...opts,
   });
   if (!res.ok) throw new Error(await res.text());
@@ -45,7 +47,7 @@ function getPlayerPid(uid) {
   return m.get(uid)?.pid ?? null;
 }
 
-function myUid()           { return TG_USER?.id || (state.pairs[0]?.uid1) || 0; }
+function myUid()           { return TG_USER?.id || URL_UID || (state.pairs[0]?.uid1) || 0; }
 function isUid1(pair)      { return pair.uid1 === myUid(); }
 function getMyScore(s, p)  { return isUid1(p) ? s.score1 : s.score2; }
 function getOppScore(s, p) { return isUid1(p) ? s.score2 : s.score1; }
