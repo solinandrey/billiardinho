@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 import { db, computeNewRatings, ELO_START } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WEBAPP_DIR = path.join(__dirname, '../webapp');
+// Serve React build output; fall back to legacy webapp if dist not present
+const DIST_DIR  = path.join(__dirname, '../webapp-react/dist');
+const WEBAPP_DIR = fs.existsSync(DIST_DIR) ? DIST_DIR : path.join(__dirname, '../webapp');
 
 const MIME = {
   '.html': 'text/html',
@@ -131,6 +133,41 @@ function handleApi(req, res, url, apiPath) {
       db.updateUserRatings(me.id, newR1, opp.id, newR2);
 
       json({ session, my_rating: newR1, opp_rating: newR2 });
+    });
+    return;
+  }
+
+  // PATCH /api/session/:id — edit a session's score
+  const sessionEditMatch = apiPath.match(/^\/session\/(\d+)$/);
+  if (sessionEditMatch && req.method === 'PATCH') {
+    body().then(b => {
+      const sessionId = parseInt(sessionEditMatch[1]);
+      const { s1, s2 } = b;
+      if (s1 == null || s2 == null) return err('s1 and s2 required');
+      db.db.prepare('UPDATE sessions SET score1 = ?, score2 = ? WHERE id = ?').run(s1, s2, sessionId);
+      json({ ok: true });
+    });
+    return;
+  }
+
+  // DELETE /api/session/:id — delete a session
+  if (sessionEditMatch && req.method === 'DELETE') {
+    const sessionId = parseInt(sessionEditMatch[1]);
+    db.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    return json({ ok: true });
+  }
+
+  // PATCH /api/me/settings — update user display settings
+  if (apiPath === '/me/settings' && req.method === 'PATCH') {
+    body().then(b => {
+      const { uid: bodyUid, name, short, color } = b;
+      const resolvedUid = bodyUid || uid;
+      if (!resolvedUid) return err('uid required', 401);
+      const user = db.getUserByUid(resolvedUid);
+      if (!user) return err('user not found', 404);
+      if (name)  db.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, user.id);
+      if (color) db.db.prepare('UPDATE users SET color = ? WHERE id = ?').run(color, user.id);
+      json({ ok: true });
     });
     return;
   }

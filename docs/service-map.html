@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<title>Billiardinho — Service Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Inter', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    padding: 40px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 48px; }
+
+  svg { width: 100%; height: auto; overflow: visible; }
+
+  /* ── Screen boxes ── */
+  .screen-box { cursor: default; }
+  .screen-rect {
+    rx: 14; ry: 14;
+    stroke-width: 1.5;
+  }
+  .screen-label {
+    font-size: 13px;
+    font-weight: 700;
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+  .screen-sublabel {
+    font-size: 10px;
+    fill: rgba(255,255,255,0.55);
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+  .screen-icon {
+    font-size: 20px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+
+  /* Colors per group */
+  .tab      { fill: #1e3a5f; stroke: #3390EC; }
+  .sub      { fill: #1a2e1a; stroke: #4ade80; }
+  .detail   { fill: #2e1a2e; stroke: #c084fc; }
+  .add-sc   { fill: #2e2a1a; stroke: #fbbf24; }
+
+  /* ── Arrows ── */
+  .arrow { fill: none; stroke-width: 1.5; marker-end: url(#arrowhead); }
+  .arr-nav    { stroke: #3390EC88; }
+  .arr-click  { stroke: #4ade8088; }
+  .arr-back   { stroke: #64748b88; stroke-dasharray: 4 3; }
+  .arr-self   { stroke: #c084fc88; }
+
+  /* ── Legend ── */
+  .legend { margin-top: 40px; display: flex; gap: 32px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #94a3b8; }
+  .legend-line { width: 36px; height: 2px; }
+  .legend-box  { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; }
+
+  /* ── Section labels ── */
+  .section-tag {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    fill: #475569;
+    text-anchor: middle;
+  }
+</style>
+</head>
+<body>
+<h1>🎱 Billiardinho — Service Map</h1>
+<p class="subtitle">Экраны Mini App · Навигация · Точки входа</p>
+
+<svg viewBox="0 0 900 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Arrow markers -->
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+    </marker>
+    <marker id="arrowhead-nav" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3390EC88"/>
+    </marker>
+    <marker id="arrowhead-click" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#4ade8088"/>
+    </marker>
+    <marker id="arrowhead-back" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#64748b88"/>
+    </marker>
+    <marker id="arrowhead-self" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#c084fc88"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION LABELS
+  ═══════════════════════════════════════════ -->
+  <text x="120" y="30" class="section-tag">Таб-навигация</text>
+  <text x="600" y="30" class="section-tag">Суб-экраны</text>
+
+  <!-- Divider -->
+  <line x1="330" y1="20" x2="330" y2="620" stroke="#1e293b" stroke-width="1" stroke-dasharray="6 4"/>
+
+  <!-- ═══════════════════════════════════════════
+       BOT ENTRY POINT
+  ═══════════════════════════════════════════ -->
+  <g class="screen-box">
+    <rect x="30" y="55" width="100" height="52" rx="10" ry="10"
+          fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+    <text x="80" y="74" class="screen-icon">🤖</text>
+    <text x="80" y="93" class="screen-label" font-size="11">Telegram</text>
+    <text x="80" y="105" class="screen-sublabel">кнопка Mini App</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════
+       BOTTOM NAV TABS (left column)
+  ═══════════════════════════════════════════ -->
+
+  <!-- HOME -->
+  <g class="screen-box">
+    <rect x="30" y="160" width="180" height="80" rx="14" ry="14"
+          class="screen-rect tab"/>
+    <text x="120" y="187" class="screen-icon">🏠</text>
+    <text x="120" y="210" class="screen-label">Главная</text>
+    <text x="120" y="226" class="screen-sublabel">Моя стата · Последние игры</text>
+  </g>
+
+  <!-- ADD -->
+  <g class="screen-box">
+    <rect x="30" y="300" width="180" height="80" rx="14" ry="14"
+          class="screen-rect add-sc"/>
+    <text x="120" y="327" class="screen-icon">➕</text>
+    <text x="120" y="350" class="screen-label">Добавить игру</text>
+    <text x="120" y="366" class="screen-sublabel">Счёт · Соперник · Дата</text>
+  </g>
+
+  <!-- PLAYERS -->
+  <g class="screen-box">
+    <rect x="30" y="440" width="180" height="80" rx="14" ry="14"
+          class="screen-rect tab"/>
+    <text x="120" y="467" class="screen-icon">🏆</text>
+    <text x="120" y="490" class="screen-label">Игроки</text>
+    <text x="120" y="506" class="screen-sublabel">Рейтинг Эло · Все игроки</text>
+  </g>
+
+  <!-- STATS -->
+  <g class="screen-box">
+    <rect x="30" y="580" width="180" height="52" rx="14" ry="14"
+          class="screen-rect tab"/>
+    <text x="120" y="598" class="screen-icon">📊</text>
+    <text x="120" y="618" class="screen-label">Статистика</text>
+  </g>
+
+  <!-- Bot → Home (entry arrow) -->
+  <path d="M80 107 L80 155" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+  <text x="90" y="135" fill="#3390EC88" font-size="10">открыть</text>
+
+  <!-- Bottom nav arrows between tabs -->
+  <path d="M30 250 C10 250 10 380 30 380" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+  <path d="M30 390 C10 390 10 455 30 455" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+  <path d="M30 525 C10 525 10 595 30 595" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+  <!-- Reverse nav -->
+  <path d="M215 380 C245 380 245 250 215 250" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+  <path d="M215 455 C245 455 245 390 215 390" class="arrow arr-nav" marker-end="url(#arrowhead-nav)"/>
+
+  <!-- Nav label -->
+  <text x="4" y="337" fill="#3390EC88" font-size="10" transform="rotate(-90,4,337)">нижняя навигация</text>
+
+  <!-- ═══════════════════════════════════════════
+       SUB-SCREENS (right column)
+  ═══════════════════════════════════════════ -->
+
+  <!-- MY PROFILE -->
+  <g class="screen-box">
+    <rect x="370" y="55" width="180" height="80" rx="14" ry="14"
+          class="screen-rect sub"/>
+    <text x="460" y="82" class="screen-icon">👤</text>
+    <text x="460" y="105" class="screen-label">Мой профиль</text>
+    <text x="460" y="121" class="screen-sublabel">Стата · Соперники · Все игры</text>
+  </g>
+
+  <!-- PLAYER PROFILE -->
+  <g class="screen-box">
+    <rect x="370" y="200" width="180" height="80" rx="14" ry="14"
+          class="screen-rect sub"/>
+    <text x="460" y="227" class="screen-icon">🧑</text>
+    <text x="460" y="250" class="screen-label">Профиль игрока</text>
+    <text x="460" y="266" class="screen-sublabel">Стата · Соперники · История</text>
+  </g>
+
+  <!-- H2H -->
+  <g class="screen-box">
+    <rect x="370" y="355" width="180" height="90" rx="14" ry="14"
+          class="screen-rect sub"/>
+    <text x="460" y="382" class="screen-icon">⚔️</text>
+    <text x="460" y="405" class="screen-label">Противостояние</text>
+    <text x="460" y="421" class="screen-sublabel">График · Период · История</text>
+    <text x="460" y="436" class="screen-sublabel">Ср. счёт · Серия</text>
+  </g>
+
+  <!-- GAME DETAIL -->
+  <g class="screen-box">
+    <rect x="370" y="510" width="180" height="70" rx="14" ry="14"
+          class="screen-rect detail"/>
+    <text x="460" y="535" class="screen-icon">🎱</text>
+    <text x="460" y="558" class="screen-label">Детали игры</text>
+    <text x="460" y="573" class="screen-sublabel">Счёт · Игроки · Дата</text>
+  </g>
+
+  <!-- ── Home → My Profile (click header) ── -->
+  <path d="M210 185 C290 185 290 95 365 95" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="255" y="172" fill="#4ade8088" font-size="10">клик шапки</text>
+
+  <!-- ── Home → Game Detail (click game card) ── -->
+  <path d="M210 230 C310 230 310 545 365 545" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="265" y="370" fill="#4ade8088" font-size="10">клик игры</text>
+
+  <!-- ── Players → Player Profile ── -->
+  <path d="M210 480 C290 480 290 240 365 240" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="250" y="330" fill="#4ade8088" font-size="10">клик игрока</text>
+
+  <!-- ── My Profile → H2H ── -->
+  <path d="M550 120 C620 120 620 355 555 380" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="600" y="240" fill="#4ade8088" font-size="10">клик соперника</text>
+
+  <!-- ── My Profile → Game Detail ── -->
+  <path d="M550 135 C660 135 720 200 720 380 C720 500 660 530 555 545"
+        class="arrow arr-click" marker-end="url(#arrowhead-click)"/>
+  <text x="700" y="340" fill="#4ade8088" font-size="10">клик игры</text>
+
+  <!-- ── Player Profile → H2H ── -->
+  <path d="M550 280 C620 280 620 380 555 395" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="596" y="336" fill="#4ade8088" font-size="10">клик соперника</text>
+
+  <!-- ── Player Profile → Game Detail ── -->
+  <path d="M460 285 L460 505" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="468" y="400" fill="#4ade8088" font-size="10">клик игры</text>
+
+  <!-- ── Player Profile → My Profile (if me) ── -->
+  <path d="M370 220 C345 220 345 120 365 120" class="arrow arr-self"
+        marker-end="url(#arrowhead-self)"/>
+  <text x="310" y="175" fill="#c084fc88" font-size="10">если это я</text>
+
+  <!-- ── H2H → Game Detail ── -->
+  <path d="M550 430 C620 430 620 545 555 545" class="arrow arr-click"
+        marker-end="url(#arrowhead-click)"/>
+  <text x="594" y="502" fill="#4ade8088" font-size="10">клик игры</text>
+
+  <!-- ── Back arrows (all sub-screens) ── -->
+  <!-- My Profile back -->
+  <path d="M365 75 C345 75 330 75 215 200" class="arrow arr-back"
+        marker-end="url(#arrowhead-back)"/>
+  <!-- Player Profile back -->
+  <path d="M365 220 C350 220 345 220 215 490" class="arrow arr-back"
+        marker-end="url(#arrowhead-back)"/>
+  <!-- H2H back -->
+  <path d="M365 380 C350 380 340 380 215 480" class="arrow arr-back"
+        marker-end="url(#arrowhead-back)"/>
+  <!-- Game detail back -->
+  <path d="M365 540 C340 540 340 480 215 490" class="arrow arr-back"
+        marker-end="url(#arrowhead-back)"/>
+
+  <!-- Back label -->
+  <text x="336" y="330" fill="#64748b" font-size="10">← назад</text>
+
+  <!-- ═══════════════════════════════════════════
+       FUTURE / PLANNED label
+  ═══════════════════════════════════════════ -->
+  <g class="screen-box" opacity="0.45">
+    <rect x="690" y="55" width="170" height="60" rx="12" ry="12"
+          fill="#1e293b" stroke="#475569" stroke-width="1" stroke-dasharray="5 3"/>
+    <text x="775" y="78" class="screen-icon" font-size="16">📝</text>
+    <text x="775" y="98" class="screen-label" font-size="11">Онбординг</text>
+    <text x="775" y="110" class="screen-sublabel">/start → имя → меню</text>
+  </g>
+  <text x="775" y="128" fill="#475569" font-size="10" text-anchor="middle">только бот, не Mini App</text>
+
+</svg>
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-box" style="background:#1e3a5f;border-color:#3390EC"></div>
+    Таб-экраны (нижняя навигация)
+  </div>
+  <div class="legend-item">
+    <div class="legend-box" style="background:#1a2e1a;border-color:#4ade80"></div>
+    Суб-экраны (навигация по нажатию)
+  </div>
+  <div class="legend-item">
+    <div class="legend-box" style="background:#2e1a2e;border-color:#c084fc"></div>
+    Детальные экраны
+  </div>
+  <div class="legend-item">
+    <svg width="36" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#3390EC88" stroke-width="2"/><polygon points="30,3 36,6 30,9" fill="#3390EC88"/></svg>
+    Нижняя навигация / открытие
+  </div>
+  <div class="legend-item">
+    <svg width="36" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#4ade8088" stroke-width="2"/><polygon points="30,3 36,6 30,9" fill="#4ade8088"/></svg>
+    Переход по нажатию
+  </div>
+  <div class="legend-item">
+    <svg width="36" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#64748b88" stroke-width="2" stroke-dasharray="4 3"/><polygon points="30,3 36,6 30,9" fill="#64748b88"/></svg>
+    Назад
+  </div>
+  <div class="legend-item">
+    <svg width="36" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#c084fc88" stroke-width="2"/><polygon points="30,3 36,6 30,9" fill="#c084fc88"/></svg>
+    Условный переход
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,262 @@
+import { useState, useEffect, useCallback } from 'react';
+import { BData } from './bdata.js';
+import { transformApiData } from './transform.js';
+import { CREAM } from './theme.js';
+import { BottomNav } from './components/BottomNav.jsx';
+import { HomeScreen } from './screens/HomeScreen.jsx';
+import { PlayersScreen } from './screens/PlayersScreen.jsx';
+import { StatsScreen } from './screens/StatsScreen.jsx';
+import { ProfileScreen } from './screens/ProfileScreen.jsx';
+import { H2HScreen } from './screens/H2HScreen.jsx';
+import { AddGameSheet } from './screens/AddGameSheet.jsx';
+import { GameDetailSheet } from './screens/GameDetailSheet.jsx';
+
+// ─── Data layer ───────────────────────────────────────────────
+// In production: fetch from /api/me to get real data.
+// In mock mode (local dev without Telegram): use BData.
+
+const IS_TELEGRAM = typeof window !== 'undefined' && !!window?.Telegram?.WebApp?.initData;
+
+async function fetchAppData() {
+  if (!IS_TELEGRAM && import.meta.env.DEV) {
+    return { mock: true, ...BData };
+  }
+  const tg = window.Telegram?.WebApp;
+  const uid = tg?.initDataUnsafe?.user?.id;
+  const res = await fetch(`/api/me${uid ? `?uid=${uid}` : ''}`);
+  if (!res.ok) throw new Error('API error');
+  const raw = await res.json();
+  return { ...transformApiData(raw) };
+}
+
+// ─── App ──────────────────────────────────────────────────────
+export default function App() {
+  const [tab, setTab] = useState(() => localStorage.getItem('bi.tab') || 'home');
+  const [stack, setStack] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [gameSheetId, setGameSheetId] = useState(null);
+  const [data, setData] = useState(null);
+
+  useEffect(() => { localStorage.setItem('bi.tab', tab); }, [tab]);
+
+  useEffect(() => {
+    if (IS_TELEGRAM) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    try {
+      const d = await fetchAppData();
+      setData(d);
+    } catch (e) {
+      console.error('Data load error:', e);
+      setData({ mock: true, ...BData });
+    }
+  }, []);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  if (!data) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: CREAM,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontFamily: 'Archivo Black', fontSize: 28 }}>🎱</div>
+        <div style={{ fontSize: 13, color: '#8A8070', fontWeight: 600 }}>Загрузка...</div>
+      </div>
+    );
+  }
+
+  const { players, games, months, eloSeries, activity, byId, me: meId,
+    winnerOf, gamesBetween, recordBetween, recentGamesOf, rivalsOf, formatDate, relativeDate } = data;
+  const me = byId[meId];
+
+  const go = (kind, params) => {
+    if (kind === 'game') { setGameSheetId(params.gameId); return; }
+    setStack(s => [...s, { kind, params }]);
+  };
+  const goBack = () => setStack(s => s.slice(0, -1));
+  const setTabAndClear = (t) => { setStack([]); setTab(t); };
+
+  // ─── API actions ─────────────────────────────────────────────
+  const handleAddGame = async ({ opponentId, scoreMe, scoreOpp }) => {
+    if (data.mock) {
+      const newId = 'g' + Date.now();
+      const today = new Date().toISOString().split('T')[0];
+      data.games.unshift({ id: newId, p1: meId, p2: opponentId, s1: scoreMe, s2: scoreOpp, date: today });
+      setData({ ...data });
+      return;
+    }
+    const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp }),
+    });
+    await reload();
+  };
+
+  const handleSaveEdit = async (gameId, s1, s2) => {
+    if (data.mock) {
+      const g = data.games.find(x => x.id === gameId);
+      if (g) { g.s1 = s1; g.s2 = s2; }
+      setData({ ...data });
+      return;
+    }
+    await fetch(`/api/session/${gameId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ s1, s2 }),
+    });
+    await reload();
+  };
+
+  const handleDelete = async (gameId) => {
+    if (data.mock) {
+      const idx = data.games.findIndex(x => x.id === gameId);
+      if (idx >= 0) data.games.splice(idx, 1);
+      setData({ ...data });
+      return;
+    }
+    await fetch(`/api/session/${gameId}`, { method: 'DELETE' });
+    await reload();
+  };
+
+  const handleSaveSettings = async (updates) => {
+    if (data.mock) {
+      Object.assign(byId[meId], updates);
+      setData({ ...data });
+      return;
+    }
+    const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    await fetch('/api/me/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, ...updates }),
+    });
+    await reload();
+  };
+
+  // ─── Screen routing ─────────────────────────────────────────
+  const top = stack[stack.length - 1];
+  const onRootTab = !top;
+
+  let screenNode;
+  if (top) {
+    if (top.kind === 'profile') {
+      screenNode = (
+        <ProfileScreen
+          playerId={top.params.playerId}
+          meId={meId}
+          players={players}
+          games={games}
+          byId={byId}
+          winnerOf={winnerOf}
+          relativeDate={relativeDate}
+          recordBetween={recordBetween}
+          gamesBetween={gamesBetween}
+          rivalsOf={rivalsOf}
+          recentGamesOf={recentGamesOf}
+          go={go}
+          goBack={goBack}
+          fromRoot={top.params.playerId === meId && stack.length === 1}
+          onSaveSettings={handleSaveSettings}
+        />
+      );
+    } else if (top.kind === 'h2h') {
+      screenNode = (
+        <H2HScreen
+          a={top.params.a}
+          b={top.params.b}
+          byId={byId}
+          games={games}
+          winnerOf={winnerOf}
+          relativeDate={relativeDate}
+          go={go}
+          goBack={goBack}
+        />
+      );
+    }
+  } else if (tab === 'home') {
+    screenNode = (
+      <HomeScreen
+        me={me}
+        players={players}
+        games={games}
+        byId={byId}
+        winnerOf={winnerOf}
+        relativeDate={relativeDate}
+        go={go}
+      />
+    );
+  } else if (tab === 'players') {
+    screenNode = <PlayersScreen players={players} games={games} go={go} />;
+  } else if (tab === 'stats') {
+    screenNode = <StatsScreen players={players} games={games} months={months} eloSeries={eloSeries} activity={activity} />;
+  } else if (tab === 'profile') {
+    screenNode = (
+      <ProfileScreen
+        playerId={meId}
+        meId={meId}
+        players={players}
+        games={games}
+        byId={byId}
+        winnerOf={winnerOf}
+        relativeDate={relativeDate}
+        recordBetween={recordBetween}
+        gamesBetween={gamesBetween}
+        rivalsOf={rivalsOf}
+        recentGamesOf={recentGamesOf}
+        go={go}
+        fromRoot
+        onSaveSettings={handleSaveSettings}
+      />
+    );
+  }
+
+  const showBottomNav = onRootTab || (top?.kind === 'profile' && stack.length === 1 && top.params.playerId === meId);
+  const currentGame = gameSheetId ? games.find(g => g.id === gameSheetId) : null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: CREAM,
+      fontFamily: 'Inter, system-ui, sans-serif',
+      color: '#1A1612',
+    }}>
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        {screenNode}
+      </div>
+
+      {showBottomNav && (
+        <BottomNav tab={tab} setTab={setTabAndClear} openAdd={() => setShowAdd(true)} />
+      )}
+
+      {showAdd && (
+        <AddGameSheet
+          me={me}
+          players={players}
+          onClose={() => setShowAdd(false)}
+          onSaved={handleAddGame}
+        />
+      )}
+
+      {currentGame && (
+        <GameDetailSheet
+          game={currentGame}
+          byId={byId}
+          meId={meId}
+          winnerOf={winnerOf}
+          onClose={() => setGameSheetId(null)}
+          onSaved={handleSaveEdit}
+          onDelete={handleDelete}
+          go={go}
+        />
+      )}
+    </div>
+  );
+}
