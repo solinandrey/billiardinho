@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Бильярд Клуб</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -38,6 +39,11 @@
             <div class="header-stat-num" id="stat-winrate">—</div>
             <div class="header-stat-label">Винрейт</div>
           </div>
+          <div class="header-stat-divider"></div>
+          <div class="header-stat">
+            <div class="header-stat-num" id="stat-rating">—</div>
+            <div class="header-stat-label">Рейтинг</div>
+          </div>
         </div>
       </div>
       <div class="content">
@@ -60,8 +66,6 @@
       </div>
       <div class="content">
         <div class="form-card">
-
-          <!-- Score with player labels -->
           <div class="form-group">
             <label class="form-label">Счёт</label>
             <div class="score-row">
@@ -77,7 +81,6 @@
             </div>
           </div>
 
-          <!-- Custom opponent selector -->
           <div class="form-group">
             <label class="form-label">Соперник</label>
             <div class="custom-select" id="opponent-select">
@@ -88,7 +91,7 @@
               <div class="custom-select-dropdown" id="opponent-dropdown">
                 <div class="custom-select-search-wrap">
                   <input class="custom-select-search" id="opponent-search" type="text"
-                    placeholder="Поиск по имени или #ID..." oninput="filterOpponents(this.value)" autocomplete="off" />
+                    placeholder="Поиск по имени..." oninput="filterOpponents(this.value)" autocomplete="off" />
                 </div>
                 <div class="custom-select-list" id="opponent-list"></div>
               </div>
@@ -96,7 +99,6 @@
             <input type="hidden" id="add-opponent" value="" />
           </div>
 
-          <!-- Date -->
           <div class="form-group">
             <label class="form-label">Дата</label>
             <input class="form-input" type="date" id="add-date" />
@@ -111,10 +113,20 @@
     <div class="screen" id="screen-players">
       <div class="page-header">
         <h1 class="page-title">Игроки</h1>
-        <div class="page-subtitle">Рейтинг по винрейту</div>
+        <div class="page-subtitle">Рейтинг Эло (1.0 – 10.0)</div>
       </div>
       <div class="content">
         <div class="card-list" id="all-players"></div>
+      </div>
+    </div>
+
+    <!-- ── STATS ───────────────────────────────────────── -->
+    <div class="screen" id="screen-stats">
+      <div class="page-header">
+        <h1 class="page-title">Статистика</h1>
+      </div>
+      <div class="content" id="stats-content">
+        <!-- заполняется renderStats() -->
       </div>
     </div>
 
@@ -128,6 +140,7 @@
             <div class="profile-name" id="player-profile-name">—</div>
             <div class="player-id-badge" id="player-profile-id"></div>
           </div>
+          <div class="profile-sub" id="player-profile-rating"></div>
         </div>
         <div class="header-stats" style="margin-top:16px">
           <div class="header-stat">
@@ -162,6 +175,7 @@
             <div class="profile-name" id="my-profile-name">—</div>
             <div class="player-id-badge" id="my-profile-id"></div>
           </div>
+          <div class="profile-sub" id="my-profile-rating"></div>
         </div>
         <div class="header-stats" style="margin-top:16px">
           <div class="header-stat">
@@ -181,6 +195,62 @@
         </div>
       </div>
       <div class="content" id="my-profile-content"></div>
+    </div>
+
+    <!-- ── HEAD TO HEAD ───────────────────────────────── -->
+    <div class="screen" id="screen-h2h">
+      <div class="header-card" id="h2h-header">
+        <button class="back-btn" onclick="goBack()">← Назад</button>
+        <div class="h2h-players" style="margin-top:12px">
+          <div class="h2h-player" id="h2h-p1-block">
+            <div class="h2h-avatar" id="h2h-av1"></div>
+            <div class="h2h-name" id="h2h-name1"></div>
+          </div>
+          <div class="h2h-vs">vs</div>
+          <div class="h2h-player" id="h2h-p2-block">
+            <div class="h2h-avatar" id="h2h-av2"></div>
+            <div class="h2h-name" id="h2h-name2"></div>
+          </div>
+        </div>
+        <div class="header-stats" style="margin-top:16px">
+          <div class="header-stat">
+            <div class="header-stat-num" id="h2h-w1">—</div>
+            <div class="header-stat-label" id="h2h-label1">Победы</div>
+          </div>
+          <div class="header-stat-divider"></div>
+          <div class="header-stat">
+            <div class="header-stat-num" id="h2h-total">—</div>
+            <div class="header-stat-label">Игр</div>
+          </div>
+          <div class="header-stat-divider"></div>
+          <div class="header-stat">
+            <div class="header-stat-num" id="h2h-w2">—</div>
+            <div class="header-stat-label" id="h2h-label2">Победы</div>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title-row">
+              <span class="section-icon">📈</span>
+              <span class="section-title">Ход противостояния</span>
+            </div>
+          </div>
+          <div class="chart-card">
+            <canvas id="h2h-chart"></canvas>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title-row">
+              <span class="section-icon">📋</span>
+              <span class="section-title">История игр</span>
+            </div>
+          </div>
+          <div class="card-list" id="h2h-games"></div>
+        </div>
+      </div>
     </div>
 
     <!-- ── GAME DETAIL ────────────────────────────────── -->
@@ -217,6 +287,10 @@
       <button class="nav-item" onclick="switchTab('players')" data-tab="players">
         <span class="nav-icon">🏆</span>
         <span class="nav-label">Игроки</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('stats')" data-tab="stats">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Статистика</span>
       </button>
     </nav>
 

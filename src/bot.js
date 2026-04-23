@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { db } from "./db.js";
+import { db, computeNewRatings } from "./db.js";
 import { formatStats, formatSessions } from "./formatter.js";
 import { getState, setState, clearState } from "./fsm.js";
 import { startApiServer } from "./api.js";
@@ -19,7 +19,6 @@ function sendMenu(chatId, text) {
   ];
 
   if (process.env.WEBAPP_URL) {
-    // Pass uid in URL — Telegram doesn't always provide initData for web_app buttons
     const webAppUrl = `${process.env.WEBAPP_URL}?uid=${chatId}`;
     keyboard.unshift([{ text: "🌐 Открыть Mini App", web_app: { url: webAppUrl } }]);
   }
@@ -35,25 +34,12 @@ const CANCEL_KEYBOARD = {
   resize_keyboard: true,
 };
 
-function askNumber(chatId, text) {
-  bot.sendMessage(chatId, text, {
-    parse_mode: "Markdown",
-    reply_markup: CANCEL_KEYBOARD,
-  });
-}
-
 function askWithCancel(chatId, text) {
-  bot.sendMessage(chatId, text, {
-    parse_mode: "Markdown",
-    reply_markup: CANCEL_KEYBOARD,
-  });
+  bot.sendMessage(chatId, text, { parse_mode: "Markdown", reply_markup: CANCEL_KEYBOARD });
 }
 
-function forceReply(chatId, text) {
-  bot.sendMessage(chatId, text, {
-    parse_mode: "Markdown",
-    reply_markup: { force_reply: true },
-  });
+function askNumber(chatId, text) {
+  bot.sendMessage(chatId, text, { parse_mode: "Markdown", reply_markup: CANCEL_KEYBOARD });
 }
 
 function askNameConfirm(chatId, text, suggestedName) {
@@ -67,7 +53,6 @@ function askNameConfirm(chatId, text, suggestedName) {
   });
 }
 
-/** Best display name from Telegram profile */
 function getTelegramName(from) {
   if (from.first_name && from.last_name) return `${from.first_name} ${from.last_name}`;
   if (from.first_name) return from.first_name;
@@ -77,53 +62,34 @@ function getTelegramName(from) {
 
 // ─── /start ───────────────────────────────────────────────────────────────────
 bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const uid = msg.from.id;
-  const username = msg.from.username || null;
+  const chatId  = msg.chat.id;
+  const uid     = msg.from.id;
+  const username = msg.from.username ? `@${msg.from.username}` : null;
   const telegramName = getTelegramName(msg.from);
   clearState(chatId);
 
-  // 1. Already in a complete pair → menu
-  const completePair = db.getPairForUser(uid);
-  if (completePair) {
-    const { myName, theirName } = db.getNamesForUser(completePair, uid);
-    sendMenu(chatId, `С возвращением, *${myName}*! 🎱\nТвой соперник: *${theirName}*`);
+  // 1. Уже зарегистрирован → меню
+  let user = db.getUserByUid(uid);
+  if (user) {
+    sendMenu(chatId, `С возвращением, *${user.name}*! 🎱\nТвой рейтинг: *${user.rating}*`);
     return;
   }
 
-  // 2. Invited as partner (matched by uid or @username) → confirm name
-  // Check BEFORE "created pair" so an invited user isn't stuck in their own setup pair
-  const pendingPair = db.getPendingPairForPartner(uid, username);
-  if (pendingPair) {
-    // Auto-fill name from Telegram profile, ask to confirm
-    setState(chatId, "join_confirm_name", { pairId: pendingPair.id, suggestedName: telegramName });
-    askNameConfirm(
-      chatId,
-      `Привет! 👋 *${pendingPair.name1}* пригласил тебя вести счёт партий в бильярд.\n\nКак тебя зовут?`,
-      telegramName
-    );
-    return;
+  // 2. Есть запись без uid (по username) — например Алексей из импорта
+  if (username) {
+    const existing = db.getUserByUsername(username);
+    if (existing && !existing.uid) {
+      db.linkUserUid(existing.id, uid);
+      sendMenu(chatId, `С возвращением, *${existing.name}*! 🎱\nТвой рейтинг: *${existing.rating}*`);
+      return;
+    }
   }
 
-  // 3. Created a pair before (e.g. via import) but partner hasn't joined yet
-  const createdPair = db.getPairByCreator(uid);
-  if (createdPair) {
-    const theirName = createdPair.name2 || createdPair.username2 || "соперник";
-    sendMenu(
-      chatId,
-      `С возвращением, *${createdPair.name1}*! 🎱\n` +
-        (createdPair.uid2
-          ? `Твой соперник: *${theirName}*`
-          : `Ожидаем, когда *${theirName}* запустит бота...`)
-    );
-    return;
-  }
-
-  // 4. Brand new user → setup, use Telegram name as suggestion
-  setState(chatId, "setup_confirm_name", { suggestedName: telegramName });
+  // 3. Новый пользователь → только имя
+  setState(chatId, "register_confirm_name", { suggestedName: telegramName });
   askNameConfirm(
     chatId,
-    `Привет! 🎱 Я буду вести счёт ваших партий в бильярд.\n\nКак тебя зовут?`,
+    `Привет! 🎱 Я веду счёт партий в бильярд.\n\nКак тебя зовут?`,
     telegramName
   );
 });
@@ -147,316 +113,156 @@ bot.onText(/\/help/, (msg) => {
 // ─── Central message router ───────────────────────────────────────────────────
 bot.on("message", (msg) => {
   if (!msg.text) return;
-  const text = msg.text.trim();
+  const text   = msg.text.trim();
   const chatId = msg.chat.id;
-  const uid = msg.from.id;
-  const username = msg.from.username || null;
+  const uid    = msg.from.id;
 
   if (text.startsWith("/")) return;
 
   if (text === "❌ Отмена") {
     clearState(chatId);
-    sendMenu(chatId, "Отменено.");
+    const user = db.getUserByUid(uid);
+    if (user) sendMenu(chatId, "Отменено.");
+    else bot.sendMessage(chatId, "Отменено. Напиши /start чтобы начать.");
     return;
   }
 
   const { state, data } = getState(chatId);
 
-  // ── FSM: New user — confirm or change Telegram name ───────────────────────────
-  if (state === "setup_confirm_name") {
+  // ── Регистрация: подтверждение имени ─────────────────────────────────────────
+  if (state === "register_confirm_name") {
     if (text === "✏️ Ввести другое имя") {
-      setState(chatId, "setup_type_name", data);
+      setState(chatId, "register_type_name", data);
       askWithCancel(chatId, "Введи своё имя:");
       return;
     }
-    const name = (text === data.suggestedName || text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
-      ? data.suggestedName
-      : text;
+    const name = text === data.suggestedName ? data.suggestedName : text;
     if (!name || name.length > 32) {
       bot.sendMessage(chatId, "Имя слишком длинное. Попробуй ещё раз:");
       return;
     }
-    setState(chatId, "setup_partner", { myName: name });
-    forceReply(
-      chatId,
-      `Отлично, *${name}*! 👋\n\n` +
-        `Введи *@username* соперника в Telegram.\n` +
-        `Например: \`@alexey\`\n\n` +
-        `_Если у соперника нет username — введи его числовой ID (узнать: @userinfobot)_`
-    );
+    finishRegistration(chatId, uid, msg.from.username, name);
     return;
   }
 
-  // ── FSM: New user — manually typed name ───────────────────────────────────────
-  if (state === "setup_type_name") {
+  // ── Регистрация: ручной ввод имени ───────────────────────────────────────────
+  if (state === "register_type_name") {
     if (!text || text.length > 32) {
       askWithCancel(chatId, "Имя слишком длинное. Введи покороче:");
       return;
     }
-    setState(chatId, "setup_partner", { myName: text });
-    forceReply(
-      chatId,
-      `Отлично, *${text}*! 👋\n\n` +
-        `Введи *@username* соперника в Telegram.\n` +
-        `Например: \`@alexey\`\n\n` +
-        `_Если у соперника нет username — введи его числовой ID (узнать: @userinfobot)_`
-    );
+    finishRegistration(chatId, uid, msg.from.username, text);
     return;
   }
 
-  // ── FSM: Partner — manually typed name ────────────────────────────────────────
-  if (state === "join_type_name") {
-    if (!text || text.length > 32) {
-      askWithCancel(chatId, "Имя слишком длинное. Введи покороче:");
-      return;
-    }
-    const { pairId } = data;
-    db.completePair(pairId, uid, text);
-    clearState(chatId);
-    const pair = db.getPairForUser(uid);
-    sendMenu(
-      chatId,
-      `Добро пожаловать, *${text}*! 🎱\n` +
-        `Ты в одной таблице с *${pair.name1}*.\n\n` +
-        `Все партии — общие 👇`
-    );
+  // ── Только зарегистрированные пользователи дальше ────────────────────────────
+  const user = db.getUserByUid(uid);
+  if (!user) {
+    bot.sendMessage(chatId, "Сначала запусти /start чтобы зарегистрироваться.");
     return;
   }
 
-  // ── FSM: Enter partner's @username or numeric ID ──────────────────────────────
-  if (state === "setup_partner") {
-    const input = text.trim();
-    const isUsername = /^@?[a-zA-Z0-9_]{4,32}$/.test(input);
-    const isNumericId = /^\d{5,}$/.test(input);
-
-    if (!isUsername && !isNumericId) {
-      bot.sendMessage(
-        chatId,
-        "Введи @username (например `@alexey`) или числовой Telegram ID:",
-        { parse_mode: "Markdown" }
-      );
+  // ── FSM: Выбор соперника для записи счёта ────────────────────────────────────
+  if (state === "record_pick_opponent" || state === "record_past_pick_opponent") {
+    const others = db.getAllUsers().filter(u => u.id !== user.id);
+    const picked = others.find(u => u.name === text);
+    if (!picked) {
+      bot.sendMessage(chatId, "Выбери соперника из списка 👇");
       return;
     }
-
-    const { myName } = data;
-    db.createPair(uid, myName, input);
-    clearState(chatId);
-
-    const displayPartner = isNumericId ? input : (input.startsWith("@") ? input : `@${input}`);
-    sendMenu(
-      chatId,
-      `✅ Готово, *${myName}*!\n\n` +
-        `Как только *${displayPartner}* запустит бота — он автоматически попадёт в вашу таблицу.\n\n` +
-        `Пока можешь уже записывать партии 👇`
-    );
+    const isPast = state === "record_past_pick_opponent";
+    setState(chatId, isPast ? "record_past_date" : "record_score1", {
+      ...data,
+      opponentId: picked.id,
+      opponentName: picked.name,
+    });
+    if (isPast) {
+      askWithCancel(chatId, `Соперник: *${picked.name}*\n\nВведи дату в формате *ГГГГ-ММ-ДД*, например \`2026-03-01\`:`);
+    } else {
+      askNumber(chatId, `Сколько партий выиграл *${user.name}*?`);
+    }
     return;
   }
 
-  // ── FSM: Partner — confirm or change Telegram name ────────────────────────────
-  if (state === "join_confirm_name") {
-    if (text === "✏️ Ввести другое имя") {
-      setState(chatId, "join_type_name", data);
-      askWithCancel(chatId, "Введи своё имя:");
-      return;
-    }
-    const name = (text === data.suggestedName || text.toLowerCase() === "ок" || text.toLowerCase() === "ok")
-      ? data.suggestedName
-      : text;
-    if (!name || name.length > 32) {
-      bot.sendMessage(chatId, "Имя слишком длинное. Попробуй ещё раз:");
-      return;
-    }
-    const { pairId } = data;
-    db.completePair(pairId, uid, name);
-    clearState(chatId);
-
-    const pair = db.getPairForUser(uid);
-    sendMenu(
-      chatId,
-      `Добро пожаловать, *${name}*! 🎱\n` +
-        `Ты в одной таблице с *${pair.name1}*.\n\n` +
-        `Все партии — общие 👇`
-    );
-    return;
-  }
-
-  // ── FSM: Record score step 1 ──────────────────────────────────────────────────
+  // ── FSM: Ввод счёта шаг 1 ────────────────────────────────────────────────────
   if (state === "record_score1") {
     const n = parseInt(text);
-    if (isNaN(n) || n < 0 || n > 99) {
-      bot.sendMessage(chatId, "Введи корректное число от 0 до 99:");
-      return;
-    }
-    // Use creator pair if partner hasn't joined yet
-    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
+    if (isNaN(n) || n < 0 || n > 99) { bot.sendMessage(chatId, "Введи число от 0 до 99:"); return; }
     setState(chatId, "record_score2", { ...data, score_me: n });
-    askNumber(chatId, `Понял! Теперь — сколько партий выиграл *${theirName}*?`);
+    askNumber(chatId, `Понял! Теперь — сколько партий выиграл *${data.opponentName}*?`);
     return;
   }
 
-  // ── FSM: Record score step 2 ──────────────────────────────────────────────────
+  // ── FSM: Ввод счёта шаг 2 ────────────────────────────────────────────────────
   if (state === "record_score2") {
     const n = parseInt(text);
-    if (isNaN(n) || n < 0 || n > 99) {
-      bot.sendMessage(chatId, "Введи корректное число от 0 до 99:");
-      return;
-    }
-
-    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
-    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
-    const scoreMe = data.score_me;
-    const scoreThem = n;
-    const now = new Date().toISOString();
-
-    const score1 = pair.uid1 === uid ? scoreMe : scoreThem;
-    const score2 = pair.uid1 === uid ? scoreThem : scoreMe;
-
-    db.insertSession(pair.id, score1, score2, now);
-    clearState(chatId);
-
-    const winner =
-      scoreMe > scoreThem ? `🏆 Победил *${myName}*!`
-      : scoreThem > scoreMe ? `🏆 Победил *${theirName}*!`
-      : "🤝 Ничья!";
-
-    sendMenu(
-      chatId,
-      `✅ Записано! ${now.slice(0, 10)}\n\n` +
-        `${myName} *${scoreMe}* — *${scoreThem}* ${theirName}\n\n${winner}`
-    );
+    if (isNaN(n) || n < 0 || n > 99) { bot.sendMessage(chatId, "Введи число от 0 до 99:"); return; }
+    saveSession(chatId, user, data.opponentId, data.opponentName, data.score_me, n, new Date().toISOString());
     return;
   }
 
-  // ── FSM: Past record — date input ─────────────────────────────────────────────
+  // ── FSM: Задним числом — дата ─────────────────────────────────────────────────
   if (state === "record_past_date") {
     const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) {
-      askWithCancel(chatId, "Не понял. Введи дату в формате `ГГГГ-ММ-ДД`, например `2026-01-15`:");
-      return;
-    }
-    const [, y, m, d] = match;
-    const date = new Date(`${y}-${m}-${d}T12:00:00.000Z`);
-    if (isNaN(date.getTime())) {
-      askWithCancel(chatId, "Некорректная дата. Попробуй ещё раз:");
-      return;
-    }
-    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
-    setState(chatId, "record_past_score1", { isoDate: date.toISOString() });
-    askNumber(chatId, `Дата: *${text}*\n\nСколько партий выиграл *${myName}*?`);
+    if (!match) { askWithCancel(chatId, "Не понял. Введи дату в формате `ГГГГ-ММ-ДД`:"); return; }
+    const date = new Date(`${text}T12:00:00.000Z`);
+    if (isNaN(date.getTime())) { askWithCancel(chatId, "Некорректная дата. Попробуй ещё раз:"); return; }
+    setState(chatId, "record_past_score1", { ...data, isoDate: date.toISOString() });
+    askNumber(chatId, `Дата: *${text}*\n\nСколько партий выиграл *${user.name}*?`);
     return;
   }
 
-  // ── FSM: Past record — score1 ──────────────────────────────────────────────────
+  // ── FSM: Задним числом — счёт 1 ───────────────────────────────────────────────
   if (state === "record_past_score1") {
     const n = parseInt(text);
-    if (isNaN(n) || n < 0 || n > 99) {
-      askNumber(chatId, "Введи корректное число от 0 до 99:");
-      return;
-    }
-    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
+    if (isNaN(n) || n < 0 || n > 99) { askNumber(chatId, "Введи число от 0 до 99:"); return; }
     setState(chatId, "record_past_score2", { ...data, score_me: n });
-    askNumber(chatId, `Понял! Теперь — сколько партий выиграл *${theirName}*?`);
+    askNumber(chatId, `Сколько партий выиграл *${data.opponentName}*?`);
     return;
   }
 
-  // ── FSM: Past record — score2 ──────────────────────────────────────────────────
+  // ── FSM: Задним числом — счёт 2 ───────────────────────────────────────────────
   if (state === "record_past_score2") {
     const n = parseInt(text);
-    if (isNaN(n) || n < 0 || n > 99) {
-      askNumber(chatId, "Введи корректное число от 0 до 99:");
-      return;
-    }
-    const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-    const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
-    const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
-    const scoreMe = data.score_me;
-    const scoreThem = n;
-    const score1 = pair.uid1 === uid ? scoreMe : scoreThem;
-    const score2 = pair.uid1 === uid ? scoreThem : scoreMe;
-
-    db.insertSession(pair.id, score1, score2, data.isoDate);
-    clearState(chatId);
-
-    const dateStr = data.isoDate.slice(0, 10);
-    const winner =
-      scoreMe > scoreThem ? `🏆 Победил *${myName}*!`
-      : scoreThem > scoreMe ? `🏆 Победил *${theirName}*!`
-      : "🤝 Ничья!";
-
-    sendMenu(
-      chatId,
-      `✅ Записано! ${dateStr}\n\n` +
-        `${myName} *${scoreMe}* — *${scoreThem}* ${theirName}\n\n${winner}`
-    );
+    if (isNaN(n) || n < 0 || n > 99) { askNumber(chatId, "Введи число от 0 до 99:"); return; }
+    saveSession(chatId, user, data.opponentId, data.opponentName, data.score_me, n, data.isoDate);
     return;
   }
 
-  // ── FSM: Period input ─────────────────────────────────────────────────────────
-  if (state === "period_input") {
-    handlePeriodInput(chatId, uid, text);
-    return;
-  }
+  // ── FSM: Period / Month ───────────────────────────────────────────────────────
+  if (state === "period_input") { handlePeriodInput(chatId, uid, text); return; }
+  if (state === "month_input")  { handleMonthInput(chatId, uid, text);  return; }
 
-  // ── FSM: Month input ──────────────────────────────────────────────────────────
-  if (state === "month_input") {
-    handleMonthInput(chatId, uid, text);
-    return;
-  }
-
-  // ── Menu buttons ──────────────────────────────────────────────────────────────
-  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-
-  if (!pair) {
-    bot.sendMessage(chatId, "Сначала запусти /start чтобы настроить бота.");
-    return;
-  }
-
-  const myName = pair.uid1 === uid ? pair.name1 : pair.name2;
-  const theirName = pair.uid1 === uid ? (pair.name2 || "Соперник") : pair.name1;
-
+  // ── Кнопки меню ───────────────────────────────────────────────────────────────
   switch (text) {
-    case "🎱 Записать счёт": {
-      setState(chatId, "record_score1");
-      askNumber(chatId, `Сколько партий выиграл *${myName}*?`);
+    case "🎱 Записать счёт":
+      startRecordFlow(chatId, user, false);
       break;
-    }
 
-    case "🕰 Задним числом": {
-      setState(chatId, "record_past_date");
-      askWithCancel(chatId, `Введи дату в формате *ГГГГ-ММ-ДД*, например \`2026-03-01\`:`);
+    case "🕰 Задним числом":
+      startRecordFlow(chatId, user, true);
       break;
-    }
 
     case "📊 Статистика": {
-      const rows = db.getAllSessions(pair.id);
-      bot.sendMessage(chatId, formatStats(rows, "Всё время", pair.name1, pair.name2 || "Соперник"), {
-        parse_mode: "Markdown",
-      });
+      const sessions = db.getSessionsForUser(user.id);
+      const result   = aggregateStats(sessions, user.id);
+      bot.sendMessage(chatId, formatUserStats(result, user.name), { parse_mode: "Markdown" });
       break;
     }
 
     case "📋 Последние партии": {
-      const rows = db.getLastSessions(pair.id, 10);
-      bot.sendMessage(chatId, formatSessions(rows, pair.name1, pair.name2 || "Соперник"), {
-        parse_mode: "Markdown",
-      });
+      const sessions = db.getSessionsForUser(user.id);
+      const recent   = [...sessions].sort((a, b) => b.played_at.localeCompare(a.played_at)).slice(0, 10);
+      bot.sendMessage(chatId, formatUserSessions(recent, user), { parse_mode: "Markdown" });
       break;
     }
 
-    case "📅 За месяц": {
+    case "📅 За месяц":
       setState(chatId, "month_input");
-      askWithCancel(
-        chatId,
-        `За какой месяц?\n\nНапиши *текущий* или дату в формате *ГГГГ-ММ*, например \`2025-11\``
-      );
+      askWithCancel(chatId, `За какой месяц?\n\nНапиши *текущий* или дату в формате *ГГГГ-ММ*, например \`2025-11\``);
       break;
-    }
 
-    case "🕐 За период": {
+    case "🕐 За период":
       setState(chatId, "period_input");
       askWithCancel(
         chatId,
@@ -467,16 +273,18 @@ bot.on("message", (msg) => {
           `\`2025-01-01 2025-03-01\` — точные даты`
       );
       break;
-    }
 
     case "↩️ Отменить последнюю": {
-      const deleted = db.deleteLastSession(pair.id);
+      const deleted = db.deleteLastSessionForUser(user.id);
       if (deleted) {
-        sendMenu(
-          chatId,
-          `✅ Последняя запись удалена:\n` +
-            `${deleted.played_at.slice(0, 10)} — ${pair.name1} ${deleted.score1}:${deleted.score2} ${pair.name2 || "Соперник"}`
-        );
+        const opp = deleted.user1_id === user.id
+          ? db.getUserById(deleted.user2_id)
+          : db.getUserById(deleted.user1_id);
+        const oppName = opp?.name || "Соперник";
+        const myS  = deleted.user1_id === user.id ? deleted.score1 : deleted.score2;
+        const oppS = deleted.user1_id === user.id ? deleted.score2 : deleted.score1;
+        sendMenu(chatId, `✅ Последняя запись удалена:\n${deleted.played_at.slice(0, 10)} — ${user.name} ${myS}:${oppS} ${oppName}`);
+        // Пересчёт рейтингов не делаем при откате (слишком сложно retroactively)
       } else {
         bot.sendMessage(chatId, "Нет записей для удаления.");
       }
@@ -488,17 +296,110 @@ bot.on("message", (msg) => {
   }
 });
 
-// ─── Helper: period stats ──────────────────────────────────────────────────────
+// ─── Helpers: регистрация ─────────────────────────────────────────────────────
+function finishRegistration(chatId, uid, rawUsername, name) {
+  const username = rawUsername ? `@${rawUsername}` : null;
+  db.createUser(uid, username, name);
+  clearState(chatId);
+  sendMenu(chatId, `Добро пожаловать, *${name}*! 🎱\n\nТы зарегистрирован. Начальный рейтинг: *5.0*`);
+}
+
+// ─── Helpers: запуск записи счёта ────────────────────────────────────────────
+function startRecordFlow(chatId, user, isPast) {
+  const others = db.getAllUsers().filter(u => u.id !== user.id);
+  if (!others.length) {
+    bot.sendMessage(chatId, "Пока нет других игроков в системе.");
+    return;
+  }
+  setState(chatId, isPast ? "record_past_pick_opponent" : "record_pick_opponent");
+  bot.sendMessage(chatId, `С кем играл *${user.name}*?`, {
+    parse_mode: "Markdown",
+    reply_markup: {
+      keyboard: [
+        ...others.map(u => [{ text: u.name }]),
+        [{ text: "❌ Отмена" }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    },
+  });
+}
+
+// ─── Helpers: сохранение игры + обновление рейтингов ─────────────────────────
+function saveSession(chatId, user, opponentId, opponentName, scoreMe, scoreThem, playedAt) {
+  const opponent = db.getUserById(opponentId);
+  if (!opponent) { bot.sendMessage(chatId, "Не нашёл соперника. Попробуй ещё раз."); return; }
+
+  // user — это тот, кто вводит счёт; user1 в сессии = user
+  db.insertSessionForUsers(user.id, opponentId, scoreMe, scoreThem, playedAt);
+
+  // Обновить рейтинги
+  const { newR1, newR2 } = computeNewRatings(user.rating, opponent.rating, scoreMe, scoreThem);
+  db.updateUserRatings(user.id, newR1, opponentId, newR2);
+
+  clearState(chatId);
+
+  const winner = scoreMe > scoreThem ? `🏆 Победил *${user.name}*!`
+    : scoreThem > scoreMe          ? `🏆 Победил *${opponentName}*!`
+    : "🤝 Ничья!";
+
+  const ratingLine =
+    `\n\n📈 Рейтинги: *${user.name}* ${user.rating} → *${newR1}*, *${opponentName}* ${opponent.rating} → *${newR2}*`;
+
+  sendMenu(
+    chatId,
+    `✅ Записано! ${playedAt.slice(0, 10)}\n\n` +
+      `${user.name} *${scoreMe}* — *${scoreThem}* ${opponentName}\n\n${winner}${ratingLine}`
+  );
+}
+
+// ─── Stats helpers ────────────────────────────────────────────────────────────
+function aggregateStats(sessions, userId) {
+  let total = 0, wins = 0, draws = 0;
+  for (const s of sessions) {
+    const myS  = s.user1_id === userId ? s.score1 : s.score2;
+    const oppS = s.user1_id === userId ? s.score2 : s.score1;
+    total++;
+    if (myS > oppS) wins++;
+    else if (myS === oppS) draws++;
+  }
+  return { total, wins, draws, losses: total - wins - draws };
+}
+
+function formatUserStats({ total, wins, draws, losses }, name) {
+  if (!total) return `У *${name}* пока нет записанных партий.`;
+  const wr = Math.round(wins / total * 100);
+  return (
+    `📊 *Статистика ${name}*\n\n` +
+    `Всего партий: *${total}*\n` +
+    `Победы: *${wins}* (${wr}%)\n` +
+    `Поражения: *${losses}*\n` +
+    (draws ? `Ничьи: *${draws}*\n` : "")
+  );
+}
+
+function formatUserSessions(sessions, user) {
+  if (!sessions.length) return "Нет записей.";
+  const lines = sessions.map(s => {
+    const myS   = s.user1_id === user.id ? s.score1 : s.score2;
+    const oppS  = s.user1_id === user.id ? s.score2 : s.score1;
+    const oppId = s.user1_id === user.id ? s.user2_id : s.user1_id;
+    const opp   = db.getUserById(oppId);
+    const result = myS > oppS ? "✅" : myS < oppS ? "❌" : "🤝";
+    return `${result} ${s.played_at.slice(0, 10)}  ${user.name} *${myS}:${oppS}* ${opp?.name ?? "?"}`;
+  });
+  return `📋 *Последние партии*\n\n${lines.join("\n")}`;
+}
+
+// ─── Period / Month (работают по user.id) ────────────────────────────────────
 function handlePeriodInput(chatId, uid, arg) {
   clearState(chatId);
-  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-  if (!pair) return;
+  const user = db.getUserByUid(uid);
+  if (!user) return;
   let from, to, label;
-
   const shortcut = arg.match(/^(\d+)([wmd])$/i);
   if (shortcut) {
-    const n = parseInt(shortcut[1]);
-    const unit = shortcut[2].toLowerCase();
+    const n = parseInt(shortcut[1]), unit = shortcut[2].toLowerCase();
     to = new Date(); from = new Date();
     if (unit === "w") { from.setDate(from.getDate() - n * 7); label = `последние ${n} нед.`; }
     else if (unit === "m") { from.setMonth(from.getMonth() - n); label = `последние ${n} мес.`; }
@@ -512,33 +413,34 @@ function handlePeriodInput(chatId, uid, arg) {
     from = new Date(dates[1]); to = new Date(dates[2]);
     label = `${dates[1]} — ${dates[2]}`;
   }
-
-  const rows = db.getSessionsByPeriod(pair.id, from.toISOString(), to.toISOString());
-  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2 || "Соперник"), { parse_mode: "Markdown" });
+  const sessions = db.getSessionsForUser(user.id).filter(
+    s => s.played_at >= from.toISOString() && s.played_at <= to.toISOString()
+  );
+  const result = aggregateStats(sessions, user.id);
+  bot.sendMessage(chatId, `📊 *${user.name}* за ${label}\n\n` + formatUserStats(result, user.name).replace(/^📊.*\n\n/, ""), { parse_mode: "Markdown" });
 }
 
-// ─── Helper: month stats ───────────────────────────────────────────────────────
 function handleMonthInput(chatId, uid, arg) {
   clearState(chatId);
-  const pair = db.getPairForUser(uid) || db.getPairByCreator(uid);
-  if (!pair) return;
+  const user = db.getUserByUid(uid);
+  if (!user) return;
   let year, month;
-
   if (arg.toLowerCase() === "текущий" || arg.toLowerCase() === "сейчас") {
-    const now = new Date();
-    year = now.getFullYear(); month = now.getMonth() + 1;
+    const now = new Date(); year = now.getFullYear(); month = now.getMonth() + 1;
   } else {
     const match = arg.match(/^(\d{4})-(\d{2})$/);
-    if (!match) {
-      bot.sendMessage(chatId, "Не понял. Напиши *текущий* или `2025-11`", { parse_mode: "Markdown" });
-      return;
-    }
+    if (!match) { bot.sendMessage(chatId, "Не понял. Напиши *текущий* или `2025-11`", { parse_mode: "Markdown" }); return; }
     year = parseInt(match[1]); month = parseInt(match[2]);
   }
-
-  const rows = db.getSessionsByMonth(pair.id, year, month);
+  const from  = `${year}-${String(month).padStart(2, "0")}-01`;
+  const toDate = new Date(year, month, 1);
+  const to    = toDate.toISOString();
+  const sessions = db.getSessionsForUser(user.id).filter(
+    s => s.played_at >= from && s.played_at < to
+  );
   const label = `${year}-${String(month).padStart(2, "0")}`;
-  bot.sendMessage(chatId, formatStats(rows, label, pair.name1, pair.name2 || "Соперник"), { parse_mode: "Markdown" });
+  const result = aggregateStats(sessions, user.id);
+  bot.sendMessage(chatId, `📊 *${user.name}* за ${label}\n\n` + formatUserStats(result, user.name).replace(/^📊.*\n\n/, ""), { parse_mode: "Markdown" });
 }
 
 bot.on("polling_error", (err) => console.error("Polling error:", err.message));
