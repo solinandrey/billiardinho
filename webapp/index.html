@@ -230,6 +230,8 @@
         </div>
       </div>
       <div class="content">
+        <div id="h2h-extra" class="h2h-extra"></div>
+
         <div class="section">
           <div class="section-header">
             <div class="section-title-row">
@@ -237,7 +239,13 @@
               <span class="section-title">Ход противостояния</span>
             </div>
           </div>
-          <div class="chart-card">
+          <div class="period-selector" id="h2h-period-selector">
+            <button class="period-btn" data-period="3m" onclick="setH2HPeriod('3m')">3М</button>
+            <button class="period-btn active" data-period="6m" onclick="setH2HPeriod('6m')">6М</button>
+            <button class="period-btn" data-period="1y" onclick="setH2HPeriod('1y')">1Г</button>
+            <button class="period-btn" data-period="all" onclick="setH2HPeriod('all')">Всё</button>
+          </div>
+          <div class="chart-card chart-lg">
             <canvas id="h2h-chart"></canvas>
           </div>
         </div>

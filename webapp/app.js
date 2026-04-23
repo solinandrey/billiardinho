@@ -509,51 +509,155 @@ function openMyProfile() {
 }
 
 // ── Head-to-Head ──────────────────────────────────────────────────────────────
+let _h2hId1 = null, _h2hId2 = null, _h2hPeriod = '6m';
+
+const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+function fmtMonthLabel(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const label = MONTHS_SHORT[d.getMonth()];
+  // Показываем год если не текущий
+  return d.getFullYear() !== now.getFullYear() ? `${label} ${String(d.getFullYear()).slice(2)}` : label;
+}
+
+function filterByPeriod(sessions, period) {
+  if (period === 'all') return sessions;
+  const now = new Date();
+  const from = new Date(now);
+  if (period === '3m') from.setMonth(from.getMonth() - 3);
+  else if (period === '6m') from.setMonth(from.getMonth() - 6);
+  else if (period === '1y') from.setFullYear(from.getFullYear() - 1);
+  const filtered = sessions.filter(s => new Date(s.played_at) >= from);
+  // Если в периоде меньше 3 сессий — показываем все
+  return filtered.length >= 3 ? filtered : sessions;
+}
+
+function setH2HPeriod(period) {
+  _h2hPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === period);
+  });
+  renderH2HChart();
+}
+
 function openH2H(id1, id2) {
+  _h2hId1 = id1;
+  _h2hId2 = id2;
+  _h2hPeriod = '6m';
+
   const u1 = state.users.find(u => u.id === id1);
   const u2 = state.users.find(u => u.id === id2);
   if (!u1 || !u2) return;
 
-  const sessions = state.sessions
+  const allSessions = state.sessions
     .filter(s => (s.user1_id === id1 && s.user2_id === id2) || (s.user1_id === id2 && s.user2_id === id1))
     .sort((a, b) => a.played_at.localeCompare(b.played_at));
 
   let w1 = 0, w2 = 0, draws = 0;
-  for (const s of sessions) {
+  let totalScore1 = 0, totalScore2 = 0;
+  let streak = 0, streakName = '';
+  let curStreak = 0, curStreakDir = 0;
+
+  for (const s of allSessions) {
     const s1 = s.user1_id === id1 ? s.score1 : s.score2;
     const s2 = s.user1_id === id1 ? s.score2 : s.score1;
+    totalScore1 += s1; totalScore2 += s2;
     if (s1 > s2) w1++;
     else if (s2 > s1) w2++;
     else draws++;
   }
 
-  document.getElementById('h2h-av1').textContent  = initials(u1.name);
-  document.getElementById('h2h-av2').textContent  = initials(u2.name);
+  // Текущая серия (идём с конца)
+  for (let i = allSessions.length - 1; i >= 0; i--) {
+    const s = allSessions[i];
+    const s1 = s.user1_id === id1 ? s.score1 : s.score2;
+    const s2 = s.user1_id === id1 ? s.score2 : s.score1;
+    const dir = s1 > s2 ? 1 : s2 > s1 ? -1 : 0;
+    if (i === allSessions.length - 1) { curStreakDir = dir; curStreak = dir !== 0 ? 1 : 0; }
+    else if (dir === curStreakDir && dir !== 0) curStreak++;
+    else break;
+  }
+
+  document.getElementById('h2h-av1').textContent   = initials(u1.name);
+  document.getElementById('h2h-av2').textContent   = initials(u2.name);
   document.getElementById('h2h-name1').textContent = u1.name;
   document.getElementById('h2h-name2').textContent = u2.name;
   document.getElementById('h2h-w1').textContent    = w1;
   document.getElementById('h2h-w2').textContent    = w2;
-  document.getElementById('h2h-total').textContent = sessions.length;
+  document.getElementById('h2h-total').textContent = allSessions.length;
   document.getElementById('h2h-label1').textContent = u1.name.split(' ')[0];
   document.getElementById('h2h-label2').textContent = u2.name.split(' ')[0];
 
+  // Доп. статистика
+  const lastGame = allSessions.length ? allSessions[allSessions.length - 1] : null;
+  const avgS1 = allSessions.length ? (totalScore1 / allSessions.length).toFixed(1) : '—';
+  const avgS2 = allSessions.length ? (totalScore2 / allSessions.length).toFixed(1) : '—';
+  const streakText = curStreak > 1
+    ? `🔥 Серия ${curStreak}: ${curStreakDir > 0 ? u1.name.split(' ')[0] : u2.name.split(' ')[0]}`
+    : '';
+  const lastText = lastGame
+    ? `Последняя: ${fmtDate(lastGame.played_at)}`
+    : '';
+
+  const extraEl = document.getElementById('h2h-extra');
+  if (extraEl) {
+    extraEl.innerHTML = `
+      <div class="h2h-extra-row">
+        <div class="h2h-extra-item">
+          <div class="h2h-extra-val">${avgS1}</div>
+          <div class="h2h-extra-label">ср. счёт ${u1.name.split(' ')[0]}</div>
+        </div>
+        <div class="h2h-extra-item">
+          <div class="h2h-extra-val">${draws || '0'}</div>
+          <div class="h2h-extra-label">ничьих</div>
+        </div>
+        <div class="h2h-extra-item">
+          <div class="h2h-extra-val">${avgS2}</div>
+          <div class="h2h-extra-label">ср. счёт ${u2.name.split(' ')[0]}</div>
+        </div>
+      </div>
+      ${streakText || lastText ? `<div class="h2h-extra-sub">${[streakText, lastText].filter(Boolean).join(' · ')}</div>` : ''}
+    `;
+  }
+
   // История игр
-  document.getElementById('h2h-games').innerHTML = sessions.length
-    ? [...sessions].reverse().map(s => gameCardHTMLFromPerspective(s, id1)).join('')
+  document.getElementById('h2h-games').innerHTML = allSessions.length
+    ? [...allSessions].reverse().map(s => gameCardHTMLFromPerspective(s, id1)).join('')
     : emptyState('🎱', 'Нет игр между этими игроками');
 
-  // График "ход противостояния" — накопленный баланс побед
+  // Сбросить период-кнопки
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === _h2hPeriod);
+  });
+
+  renderH2HChart();
+  pushScreen('screen-h2h');
+}
+
+function renderH2HChart() {
+  const id1 = _h2hId1, id2 = _h2hId2;
+  const u1 = state.users.find(u => u.id === id1);
+  const u2 = state.users.find(u => u.id === id2);
+  if (!u1 || !u2) return;
+
+  const allSessions = state.sessions
+    .filter(s => (s.user1_id === id1 && s.user2_id === id2) || (s.user1_id === id2 && s.user2_id === id1))
+    .sort((a, b) => a.played_at.localeCompare(b.played_at));
+
+  const sessions = filterByPeriod(allSessions, _h2hPeriod);
+
   if (h2hChartInstance) { h2hChartInstance.destroy(); h2hChartInstance = null; }
 
   const labels  = [];
-  const balance = [0]; // положительное = u1 впереди
+  const balance = [0];
   let cum = 0;
   for (const s of sessions) {
     const s1 = s.user1_id === id1 ? s.score1 : s.score2;
     const s2 = s.user1_id === id1 ? s.score2 : s.score1;
     if (s1 > s2) cum++;
     else if (s2 > s1) cum--;
-    labels.push(s.played_at.slice(0, 10));
+    labels.push(fmtMonthLabel(s.played_at));
     balance.push(cum);
   }
 
@@ -561,19 +665,15 @@ function openH2H(id1, id2) {
   h2hChartInstance = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: ['Старт', ...labels],
+      labels: ['', ...labels],
       datasets: [{
-        label: `Преимущество ${u1.name}`,
         data: balance,
         borderColor: '#60a5fa',
-        backgroundColor: ctx => {
-          const v = ctx.raw;
-          return v >= 0 ? '#60a5fa22' : '#f8717122';
-        },
         fill: { target: { value: 0 }, above: '#60a5fa22', below: '#f8717122' },
-        tension: 0.2,
+        tension: 0.25,
         pointRadius: 5,
         pointBackgroundColor: balance.map(v => v > 0 ? '#60a5fa' : v < 0 ? '#f87171' : '#94a3b8'),
+        pointBorderWidth: 0,
       }],
     },
     options: {
@@ -583,28 +683,28 @@ function openH2H(id1, id2) {
         legend: { display: false },
         tooltip: {
           callbacks: {
+            title: items => labels[items[0].dataIndex - 1] || 'Старт',
             label: ctx => {
               const v = ctx.raw;
-              if (v > 0)  return `${u1.name} ведёт +${v}`;
-              if (v < 0)  return `${u2.name} ведёт +${Math.abs(v)}`;
+              if (v > 0)  return `${u1.name.split(' ')[0]} ведёт +${v}`;
+              if (v < 0)  return `${u2.name.split(' ')[0]} ведёт +${Math.abs(v)}`;
               return 'Равный счёт';
             },
           },
         },
-        annotation: {
-          annotations: {
-            zero: { type: 'line', yMin: 0, yMax: 0, borderColor: '#ffffff30', borderWidth: 1, borderDash: [4, 4] },
-          },
-        },
       },
       scales: {
-        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#ffffff10' } },
-        y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#ffffff10' } },
+        x: {
+          ticks: { color: '#94a3b8', font: { size: 11 }, maxRotation: 0 },
+          grid: { color: '#00000008' },
+        },
+        y: {
+          ticks: { color: '#94a3b8', stepSize: 1, font: { size: 11 } },
+          grid: { color: '#00000010' },
+        },
       },
     },
   });
-
-  pushScreen('screen-h2h');
 }
 
 // ── Game cards ────────────────────────────────────────────────────────────────
