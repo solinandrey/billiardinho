@@ -135,6 +135,19 @@ function handleApi(req, res, url, apiPath) {
     return;
   }
 
+  // GET /api/export-db — TEMPORARY: download DB file
+  if (apiPath === '/export-db' && req.method === 'GET') {
+    const dbPath = process.env.DB_PATH || './data/billiard.db';
+    const data = fs.readFileSync(dbPath);
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment; filename="billiard.db"',
+      'Content-Length': data.length,
+    });
+    res.end(data);
+    return;
+  }
+
   // GET /api/debug
   if (apiPath === '/debug' && req.method === 'GET') {
     const users    = db.getAllUsers();
