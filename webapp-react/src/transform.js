@@ -40,8 +40,8 @@ export function transformApiData(apiData) {
     uid: u.uid,
     name: u.name,
     short: initials(u.name),
-    color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-    elo: u.rating ?? 5.0,
+    color: PLAYER_COLORS[(u.id - 1) % PLAYER_COLORS.length],
+    elo: u.rating ?? 3.0,
     games: 0,
     wins: 0,
   }));

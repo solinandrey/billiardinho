@@ -19,24 +19,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data/billiard.db");
 const db = new Database(DB_PATH);
 
-// ─── Elo helpers (шкала 1.0 – 10.0) ──────────────────────────────────────────
-const ELO_START = 5.0;
-const ELO_K     = 0.5;   // максимальный сдвиг за игру
-const ELO_D     = 3.0;   // разница рейтингов, дающая ~90% вероятность победы
+// ─── Elo helpers (шкала 1.0 – 10.0, chess.com-style) ─────────────────────────
+const ELO_START          = 3.0;
+const ELO_K_PROVISIONAL  = 2.0;  // первые 5 игр
+const ELO_K_ESTABLISHED  = 0.5;  // после 5 игр
+const ELO_PROVISIONAL_GAMES = 5;
+const ELO_D              = 3.0;
 
 function expectedScore(rA, rB) {
   return 1 / (1 + Math.pow(10, (rB - rA) / ELO_D));
 }
 
-function computeNewRatings(r1, r2, score1, score2) {
+function computeNewRatings(r1, r2, score1, score2, games1 = 999, games2 = 999) {
   const s1 = score1 > score2 ? 1 : score1 < score2 ? 0 : 0.5;
   const s2 = 1 - s1;
-  const e1 = expectedScore(r1, r2);
-  const e2 = expectedScore(r2, r1);
+  const k1 = games1 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
+  const k2 = games2 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
   const clamp = v => Math.round(Math.min(10, Math.max(1, v)) * 100) / 100;
   return {
-    newR1: clamp(r1 + ELO_K * (s1 - e1)),
-    newR2: clamp(r2 + ELO_K * (s2 - e2)),
+    newR1: clamp(r1 + k1 * (s1 - expectedScore(r1, r2))),
+    newR2: clamp(r2 + k2 * (s2 - expectedScore(r2, r1))),
   };
 }
 
@@ -47,7 +49,7 @@ db.exec(`
     uid        INTEGER UNIQUE,          -- Telegram ID (NULL пока не зашли через /start)
     username   TEXT,                    -- @username для матчинга
     name       TEXT NOT NULL,
-    rating     REAL NOT NULL DEFAULT ${ELO_START},
+    rating     REAL NOT NULL DEFAULT 3.0,
     created_at TEXT NOT NULL
   );
 `);
@@ -138,18 +140,24 @@ const allSessions = db.prepare(
 // Сбросить рейтинги к стартовым
 db.prepare("UPDATE users SET rating = ?").run(ELO_START);
 
-// Текущие рейтинги в памяти
-const ratings = new Map();
+// Текущие рейтинги и счётчик игр в памяти
+const ratings   = new Map();
+const gameCounts = new Map();
 const getR = id => ratings.get(id) ?? ELO_START;
+const getG = id => gameCounts.get(id) ?? 0;
 
 const updateRating = db.prepare("UPDATE users SET rating = ? WHERE id = ?");
 
 for (const s of allSessions) {
   const r1 = getR(s.user1_id);
   const r2 = getR(s.user2_id);
-  const { newR1, newR2 } = computeNewRatings(r1, r2, s.score1, s.score2);
+  const g1 = getG(s.user1_id);
+  const g2 = getG(s.user2_id);
+  const { newR1, newR2 } = computeNewRatings(r1, r2, s.score1, s.score2, g1, g2);
   ratings.set(s.user1_id, newR1);
   ratings.set(s.user2_id, newR2);
+  gameCounts.set(s.user1_id, g1 + 1);
+  gameCounts.set(s.user2_id, g2 + 1);
   updateRating.run(newR1, s.user1_id);
   updateRating.run(newR2, s.user2_id);
 }

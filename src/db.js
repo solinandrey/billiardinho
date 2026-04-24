@@ -5,22 +5,31 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../data/billiard.db");
 
-// ─── Elo helpers (шкала 1.0 – 10.0) ──────────────────────────────────────────
-export const ELO_START = 5.0;
-const ELO_K = 0.5;
-const ELO_D = 3.0;
+// ─── Elo helpers (шкала 1.0 – 10.0, chess.com-style) ─────────────────────────
+export const ELO_START         = 3.0;
+const ELO_K_PROVISIONAL        = 2.0;  // первые 5 игр — высокая дельта
+const ELO_K_ESTABLISHED        = 0.5;  // после 5 игр — обычная
+const ELO_PROVISIONAL_GAMES    = 5;
+const ELO_D                    = 3.0;  // разница рейтингов → ~90% вероятность
 
 function expectedScore(rA, rB) {
   return 1 / (1 + Math.pow(10, (rB - rA) / ELO_D));
 }
 
-export function computeNewRatings(r1, r2, score1, score2) {
+/**
+ * @param {number} r1, r2      — текущие рейтинги
+ * @param {number} score1, score2 — счёт партии
+ * @param {number} games1, games2 — сколько игр сыграно ДО этой партии
+ */
+export function computeNewRatings(r1, r2, score1, score2, games1 = 999, games2 = 999) {
   const s1 = score1 > score2 ? 1 : score1 < score2 ? 0 : 0.5;
   const s2 = 1 - s1;
+  const k1 = games1 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
+  const k2 = games2 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
   const clamp = v => Math.round(Math.min(10, Math.max(1, v)) * 100) / 100;
   return {
-    newR1: clamp(r1 + ELO_K * (s1 - expectedScore(r1, r2))),
-    newR2: clamp(r2 + ELO_K * (s2 - expectedScore(r2, r1))),
+    newR1: clamp(r1 + k1 * (s1 - expectedScore(r1, r2))),
+    newR2: clamp(r2 + k2 * (s2 - expectedScore(r2, r1))),
   };
 }
 
@@ -96,6 +105,13 @@ class BilliardDB {
   /** Привязать Telegram uid к пользователю (ранее null) */
   linkUserUid(userId, uid) {
     this.db.prepare("UPDATE users SET uid = ? WHERE id = ?").run(uid, userId);
+  }
+
+  countGamesForUser(userId) {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM sessions WHERE (user1_id = ? OR user2_id = ?) AND user1_id IS NOT NULL'
+    ).get(userId, userId);
+    return row?.cnt ?? 0;
   }
 
   updateUserRatings(user1Id, newR1, user2Id, newR2) {

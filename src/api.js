@@ -123,13 +123,17 @@ function handleApi(req, res, url, apiPath) {
       const opp = db.getUserById(opponent_id);
       if (!me || !opp) return err('user not found', 404);
 
+      // Count games BEFORE inserting (determines provisional K-factor)
+      const meGames  = db.countGamesForUser(me.id);
+      const oppGames = db.countGamesForUser(opp.id);
+
       const session = db.insertSessionForUsers(
         me.id, opp.id,
         score_me, score_opp,
         played_at || new Date().toISOString()
       );
 
-      const { newR1, newR2 } = computeNewRatings(me.rating, opp.rating, score_me, score_opp);
+      const { newR1, newR2 } = computeNewRatings(me.rating, opp.rating, score_me, score_opp, meGames, oppGames);
       db.updateUserRatings(me.id, newR1, opp.id, newR2);
 
       json({ session, my_rating: newR1, opp_rating: newR2 });
@@ -169,6 +173,19 @@ function handleApi(req, res, url, apiPath) {
       if (color) db.db.prepare('UPDATE users SET color = ? WHERE id = ?').run(color, user.id);
       json({ ok: true });
     });
+    return;
+  }
+
+  // GET /api/export-db — TEMPORARY, remove after use
+  if (apiPath === '/export-db' && req.method === 'GET') {
+    const dbPath = process.env.DB_PATH || './data/billiard.db';
+    const data = fs.readFileSync(dbPath);
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment; filename="billiard.db"',
+      'Content-Length': data.length,
+    });
+    res.end(data);
     return;
   }
 
