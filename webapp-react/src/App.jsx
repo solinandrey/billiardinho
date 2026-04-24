@@ -17,13 +17,22 @@ import { GameDetailSheet } from './screens/GameDetailSheet.jsx';
 
 const IS_TELEGRAM = typeof window !== 'undefined' && !!window?.Telegram?.WebApp?.initData;
 
+function authHeaders() {
+  const tg = window.Telegram?.WebApp;
+  const h = { 'Content-Type': 'application/json' };
+  if (tg?.initData) h['X-Init-Data'] = tg.initData;
+  const uid = tg?.initDataUnsafe?.user?.id;
+  if (uid) h['X-User-Id'] = String(uid);
+  return h;
+}
+
 async function fetchAppData() {
   if (!IS_TELEGRAM && import.meta.env.DEV) {
     return { mock: true, ...BData };
   }
   const tg = window.Telegram?.WebApp;
   const uid = tg?.initDataUnsafe?.user?.id;
-  const res = await fetch(`/api/me${uid ? `?uid=${uid}` : ''}`);
+  const res = await fetch(`/api/me${uid ? `?uid=${uid}` : ''}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('API error');
   const raw = await res.json();
   return { ...transformApiData(raw) };
@@ -135,7 +144,7 @@ export default function App() {
     const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     await fetch('/api/session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp, played_at: playedAt }),
     });
     await reload();
@@ -150,7 +159,7 @@ export default function App() {
     }
     await fetch(`/api/session/${gameId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ s1, s2 }),
     });
     await reload();
@@ -163,7 +172,7 @@ export default function App() {
       setData({ ...data });
       return;
     }
-    await fetch(`/api/session/${gameId}`, { method: 'DELETE' });
+    await fetch(`/api/session/${gameId}`, { method: 'DELETE', headers: authHeaders() });
     await reload();
   };
 
@@ -176,7 +185,7 @@ export default function App() {
     const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     await fetch('/api/me/settings', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ uid, ...updates }),
     });
     await reload();

@@ -18,7 +18,7 @@ const MIME = {
   '.svg': 'image/svg+xml',
 };
 
-function resolveUid(req) {
+function resolveUid(req, url) {
   const initData = req.headers['x-init-data'];
   if (initData) {
     try {
@@ -28,6 +28,8 @@ function resolveUid(req) {
   }
   const fromHeader = parseInt(req.headers['x-user-id']) || 0;
   if (fromHeader) return fromHeader;
+  const fromQuery = url ? parseInt(url.searchParams.get('uid')) || 0 : 0;
+  if (fromQuery) return fromQuery;
   return process.env.DEV_USER_ID ? parseInt(process.env.DEV_USER_ID) : 0;
 }
 
@@ -70,7 +72,7 @@ export function startApiServer(port = process.env.PORT || process.env.API_PORT |
 
 // ─── API handler ──────────────────────────────────────────────────────────────
 function handleApi(req, res, url, apiPath) {
-  const uid = resolveUid(req);
+  const uid = resolveUid(req, url);
 
   const json = (data, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
