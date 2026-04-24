@@ -21,7 +21,8 @@ function authHeaders() {
   const tg = window.Telegram?.WebApp;
   const h = { 'Content-Type': 'application/json' };
   if (tg?.initData) h['X-Init-Data'] = tg.initData;
-  const uid = tg?.initDataUnsafe?.user?.id;
+  const urlUid = new URLSearchParams(window.location.search).get('uid');
+  const uid = tg?.initDataUnsafe?.user?.id || urlUid;
   if (uid) h['X-User-Id'] = String(uid);
   return h;
 }
@@ -31,10 +32,12 @@ async function fetchAppData() {
     return { mock: true, ...BData };
   }
   const tg = window.Telegram?.WebApp;
-  const uid = tg?.initDataUnsafe?.user?.id;
+  const urlUid = new URLSearchParams(window.location.search).get('uid');
+  const uid = tg?.initDataUnsafe?.user?.id || urlUid;
   const res = await fetch(`/api/me${uid ? `?uid=${uid}` : ''}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('API error');
   const raw = await res.json();
+  if (!raw.user) throw new Error('Не удалось определить пользователя (uid не передан)');
   return { ...transformApiData(raw) };
 }
 
