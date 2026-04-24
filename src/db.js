@@ -93,11 +93,43 @@ class BilliardDB {
     `);
 
     // Доп. колонки рейтинга до/после — добавляем, если нет (идемпотентно)
-    const cols = this.db.pragma("table_info(sessions)").map(c => c.name);
+    const cols = this.db.pragma("table_info(sessions)");
+    const colNames = cols.map(c => c.name);
     for (const col of ["r1_before", "r1_after", "r2_before", "r2_after"]) {
-      if (!cols.includes(col)) {
+      if (!colNames.includes(col)) {
         this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col} REAL`);
       }
+    }
+
+    // Старые БД имеют pair_id INTEGER NOT NULL — это мешает вставке партий
+    // без пары. Пересобираем таблицу, если constraint есть.
+    const pairIdCol = cols.find(c => c.name === "pair_id");
+    if (pairIdCol && pairIdCol.notnull === 1) {
+      this.db.exec(`
+        BEGIN;
+        CREATE TABLE sessions_new (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          pair_id    INTEGER REFERENCES pairs(id),
+          score1     INTEGER NOT NULL,
+          score2     INTEGER NOT NULL,
+          played_at  TEXT NOT NULL,
+          user1_id   INTEGER REFERENCES users(id),
+          user2_id   INTEGER REFERENCES users(id),
+          r1_before  REAL,
+          r1_after   REAL,
+          r2_before  REAL,
+          r2_after   REAL
+        );
+        INSERT INTO sessions_new
+          (id, pair_id, score1, score2, played_at, user1_id, user2_id,
+           r1_before, r1_after, r2_before, r2_after)
+        SELECT id, pair_id, score1, score2, played_at, user1_id, user2_id,
+           r1_before, r1_after, r2_before, r2_after
+        FROM sessions;
+        DROP TABLE sessions;
+        ALTER TABLE sessions_new RENAME TO sessions;
+        COMMIT;
+      `);
     }
   }
 
