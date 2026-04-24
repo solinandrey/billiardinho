@@ -9,7 +9,7 @@ import { SettingsSheet } from './SettingsSheet.jsx';
 export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, relativeDate, recordBetween, gamesBetween, rivalsOf, recentGamesOf, go, goBack, fromRoot, onSaveSettings }) {
   const p = byId[playerId];
   const winPct = p.games ? Math.round(p.wins * 100 / p.games) : 0;
-  const rivals = rivalsOf(p.id);
+  const rivals = rivalsOf(p.id).filter(r => r.total > 0);
   const recent = recentGamesOf(p.id, 10);
   const scrollRef = useRef(null);
   const [scrolled, setScrolled] = useState(false);
@@ -29,7 +29,7 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
       {/* Sticky header (appears on scroll) */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
-        background: p.color, padding: '50px 16px 12px',
+        background: p.color, padding: '12px 16px',
         display: 'flex', alignItems: 'center', gap: 12,
         boxShadow: scrolled ? '0 4px 14px rgba(0,0,0,0.10)' : 'none',
         transform: scrolled ? 'translateY(0)' : 'translateY(-100%)',
@@ -57,32 +57,40 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
       <div ref={scrollRef} style={{ height: '100%', overflowY: 'auto' }}>
         {/* Colored header */}
         <div style={{
-          background: p.color, padding: '50px 18px 22px',
+          background: p.color, padding: '22px 18px',
           borderRadius: '0 0 26px 26px', position: 'relative', overflow: 'hidden',
         }}>
-          <svg style={{ position: 'absolute', right: -20, top: -10, opacity: 0.18 }} width="180" height="180" viewBox="0 0 180 180">
-            <circle cx="90" cy="90" r="70" stroke="#fff" strokeWidth="1.5" fill="none" strokeDasharray="2 6" />
-            <circle cx="90" cy="90" r="48" stroke="#fff" strokeWidth="1.5" fill="none" />
-            <circle cx="90" cy="90" r="26" stroke="#fff" strokeWidth="1.5" fill="none" strokeDasharray="2 6" />
-          </svg>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'relative', minHeight: 38 }}>
             {goBack ? (
               <button onClick={goBack} style={{
-                width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.2)',
+                width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.32)',
                 border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'relative', zIndex: 1,
               }}>{Icon.back('#fff')}</button>
             ) : <div style={{ width: 38 }} />}
-            <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', opacity: 0.85 }}>
-              {fromRoot ? 'Мой профиль' : 'Профиль игрока'}
-            </span>
             {fromRoot ? (
-              <button onClick={() => setSettingsOpen(true)} aria-label="Настройки" style={{
-                width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.2)',
-                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-              }}>
-                {Icon.gear('#fff')}
-              </button>
+              <div style={{ position: 'relative', width: 38, height: 38 }}>
+                {/* Concentric rings centered on the settings button */}
+                <svg
+                  style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    opacity: 0.22, pointerEvents: 'none',
+                  }}
+                  width="220" height="220" viewBox="0 0 220 220"
+                >
+                  <circle cx="110" cy="110" r="95" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
+                  <circle cx="110" cy="110" r="70" stroke="#fff" strokeWidth="1.2" fill="none" />
+                  <circle cx="110" cy="110" r="45" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
+                </svg>
+                <button onClick={() => setSettingsOpen(true)} aria-label="Настройки" style={{
+                  position: 'relative', zIndex: 1,
+                  width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.32)',
+                  border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                }}>
+                  {Icon.gear('#fff')}
+                </button>
+              </div>
             ) : <div style={{ width: 38 }} />}
           </div>
 
@@ -108,7 +116,7 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
 
           {/* Stat pills */}
           <div style={{
-            marginTop: 18, background: 'rgba(255,255,255,0.2)', borderRadius: 18,
+            marginTop: 18, background: 'rgba(255,255,255,0.32)', borderRadius: 18,
             padding: '10px 4px', display: 'flex', position: 'relative',
           }}>
             {[
@@ -152,31 +160,72 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
                     <div style={{ fontSize: 13, color: MUTED, fontWeight: 600 }}>Вы ещё не играли</div>
                   </Card>
                 ) : (
-                  <Card style={{ padding: '16px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                        <Avatar player={me} size={34} />
-                        <div style={{ fontSize: 12, fontWeight: 700, color: INK }}>{me.name}</div>
+                  <Card style={{ padding: '20px 18px 16px' }}>
+                    {/* Heads row — avatars centered with names below */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <Avatar player={me} size={46} />
+                        <div style={{
+                          fontSize: 12, fontWeight: 700, color: INK, textAlign: 'center', lineHeight: 1.25,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                          wordBreak: 'break-word',
+                        }}>{me.name}</div>
                       </div>
-                      <div style={{ fontFamily: 'Archivo Black', fontSize: 26, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
-                        <span style={{ color: me.color }}>{rec.xw}</span>
-                        <span style={{ color: MUTED, padding: '0 6px', fontSize: 18 }}>:</span>
-                        <span style={{ color: p.color }}>{rec.yw}</span>
+
+                      <div style={{ textAlign: 'center', minWidth: 90 }}>
+                        <div style={{
+                          fontFamily: 'Archivo Black', fontSize: 38, letterSpacing: -1.2,
+                          lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+                        }}>
+                          <span style={{ color: me.color }}>{rec.xw}</span>
+                          <span style={{ color: MUTED, padding: '0 6px', fontSize: 24 }}>:</span>
+                          <span style={{ color: p.color }}>{rec.yw}</span>
+                        </div>
+                        <div style={{
+                          fontSize: 9.5, color: MUTED, fontWeight: 700, letterSpacing: 0.7,
+                          textTransform: 'uppercase', marginTop: 8,
+                        }}>Счёт встреч</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: INK }}>{p.name}</div>
-                        <Avatar player={p} size={34} />
+
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <Avatar player={p} size={46} />
+                        <div style={{
+                          fontSize: 12, fontWeight: 700, color: INK, textAlign: 'center', lineHeight: 1.25,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                          wordBreak: 'break-word',
+                        }}>{p.name}</div>
                       </div>
                     </div>
-                    <div style={{ height: 6, borderRadius: 3, background: CREAM2, display: 'flex', overflow: 'hidden', marginBottom: 12 }}>
+
+                    {/* Win-share bar */}
+                    <div style={{ marginTop: 18, height: 6, borderRadius: 3, background: CREAM2, display: 'flex', overflow: 'hidden' }}>
                       <div style={{ width: `${(rec.xw / total) * 100}%`, background: me.color }} />
                       <div style={{ width: `${(rec.d / total) * 100}%`, background: MUTED }} />
                       <div style={{ width: `${(rec.yw / total) * 100}%`, background: p.color }} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>
-                      <span>{total} встреч{total < 5 ? 'и' : ''}</span>
-                      {rec.d > 0 && <span>{rec.d} ничьи</span>}
-                      <span style={{ color: myWinPct >= 50 ? me.color : p.color }}>{myWinPct}% побед</span>
+
+                    {/* Stats grid */}
+                    <div style={{
+                      marginTop: 14, paddingTop: 14,
+                      borderTop: `1px dashed ${LINE}`,
+                      display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
+                    }}>
+                      {[
+                        { val: total, label: 'встреч' },
+                        { val: rec.d,  label: 'ничьи' },
+                        { val: `${myWinPct}%`, label: 'мой %', color: myWinPct >= 50 ? me.color : p.color },
+                      ].map((s, i) => (
+                        <div key={i} style={{ textAlign: 'center', borderLeft: i ? `1px solid ${LINE}` : 'none' }}>
+                          <div style={{
+                            fontFamily: 'Archivo Black', fontSize: 18, letterSpacing: -0.3,
+                            color: s.color || INK, fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+                          }}>{s.val}</div>
+                          <div style={{
+                            fontSize: 9.5, color: MUTED, fontWeight: 700, letterSpacing: 0.6,
+                            textTransform: 'uppercase', marginTop: 5,
+                          }}>{s.label}</div>
+                        </div>
+                      ))}
                     </div>
                   </Card>
                 )}
@@ -192,6 +241,8 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
           })()}
 
           {/* Rivals */}
+          {rivals.length > 0 && (
+            <>
           <div style={{ fontFamily: 'Archivo Black', fontSize: 16, letterSpacing: -0.2, marginBottom: 8 }}>Соперники</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
             {rivals.map(r => {
@@ -221,6 +272,8 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
               );
             })}
           </div>
+            </>
+          )}
 
           {/* Recent games */}
           <div style={{ fontFamily: 'Archivo Black', fontSize: 16, letterSpacing: -0.2, marginBottom: 8 }}>Последние партии</div>

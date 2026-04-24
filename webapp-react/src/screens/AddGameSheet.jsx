@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CREAM, MUTED, INK, LINE } from '../theme.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Icon } from '../components/Icon.jsx';
@@ -59,13 +60,13 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
     }
   };
 
-  return (
+  return createPortal((
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
+      position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(10,8,5,0.35)', backdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
     }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className="sheet-enter" style={{
         background: CREAM, borderRadius: '30px 30px 0 0',
         padding: '14px 20px 34px', position: 'relative',
         maxHeight: '88%', overflowY: 'auto',
@@ -171,5 +172,5 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
         </button>
       </div>
     </div>
-  );
+  ), document.body);
 }

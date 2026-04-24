@@ -19,7 +19,7 @@ function filterByPeriod(games, period) {
 export function H2HScreen({ a, b, byId, games, winnerOf, relativeDate, go, goBack }) {
   const p1 = byId[a];
   const p2 = byId[b];
-  const [period, setPeriod] = useState('6М');
+  const [period, setPeriod] = useState('Всё');
 
   const allGames = games.filter(g => (g.p1 === a && g.p2 === b) || (g.p1 === b && g.p2 === a));
   const filteredGames = filterByPeriod(allGames, period);

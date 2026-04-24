@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { INK, MUTED, LINE } from '../theme.js';
 import { Icon } from '../components/Icon.jsx';
 
@@ -35,26 +36,44 @@ function EditScoreCol({ player, val, setVal }) {
 
 function PlayerTag({ p, isWinner, onClick }) {
   return (
-    <div onClick={onClick} style={{ textAlign: 'center', position: 'relative', cursor: onClick ? 'pointer' : 'default', userSelect: 'none' }}>
-      {isWinner && (
-        <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)' }}>
-          {Icon.crown('#fff')}
-        </div>
-      )}
-      <div style={{
-        width: 50, height: 50, borderRadius: 25,
-        background: '#fff', color: p.color,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'Archivo Black', fontSize: 20,
-        boxShadow: isWinner ? '0 0 0 3px rgba(255,255,255,0.5)' : 'none',
-      }}>{p.short}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-        {p.name}
-        {onClick && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.65 }}>
-            <path d="M3.5 2l3 3-3 3" />
-          </svg>
+    <div onClick={onClick} style={{
+      textAlign: 'center', cursor: onClick ? 'pointer' : 'default',
+      userSelect: 'none', width: '100%', maxWidth: 140,
+    }}>
+      {/* Avatar with crown */}
+      <div style={{ position: 'relative', width: 50, height: 50, margin: '0 auto' }}>
+        {isWinner && (
+          <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)' }}>
+            {Icon.crown('#fff')}
+          </div>
         )}
+        <div style={{
+          width: 50, height: 50, borderRadius: 25,
+          background: '#fff', color: p.color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'Archivo Black', fontSize: 20,
+          boxShadow: isWinner ? '0 0 0 3px rgba(255,255,255,0.5)' : 'none',
+        }}>{p.short}</div>
+      </div>
+
+      {/* Winner badge — reserved height so both sides stay equal */}
+      <div style={{ height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
+        {isWinner && (
+          <span style={{
+            background: 'rgba(255,255,255,0.28)', color: '#fff',
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.7,
+            padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase',
+          }}>Победа</span>
+        )}
+      </div>
+
+      {/* Name — wraps up to 2 lines */}
+      <div style={{
+        fontSize: 13, fontWeight: 700, lineHeight: 1.3, marginTop: 2,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+        overflow: 'hidden', wordBreak: 'break-word',
+      }}>
+        {p.name}{onClick ? <span style={{ opacity: 0.6 }}> ›</span> : null}
       </div>
     </div>
   );
@@ -95,13 +114,13 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
     onClose();
   };
 
-  return (
+  return createPortal((
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
+      position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(10,8,5,0.42)', backdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
     }} onClick={(editing || confirmDel) ? undefined : onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className="sheet-enter" style={{
         background: bg, color: '#fff',
         borderRadius: '30px 30px 0 0',
         padding: '14px 20px 26px', position: 'relative', overflow: 'hidden',
@@ -171,9 +190,13 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 48 }}>
-            <PlayerTag p={p1} isWinner={winner === p1.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p1.id }); }} />
-            <PlayerTag p={p2} isWinner={winner === p2.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p2.id }); }} />
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <PlayerTag p={p1} isWinner={winner === p1.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p1.id }); }} />
+            </div>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <PlayerTag p={p2} isWinner={winner === p2.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p2.id }); }} />
+            </div>
           </div>
 
           {editing && (
@@ -227,5 +250,5 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
         )}
       </div>
     </div>
-  );
+  ), document.body);
 }

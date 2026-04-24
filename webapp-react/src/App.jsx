@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { BData } from './bdata.js';
 import { transformApiData } from './transform.js';
 import { CREAM } from './theme.js';
@@ -36,6 +36,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [gameSheetId, setGameSheetId] = useState(null);
   const [data, setData] = useState(null);
+  const navDir = useRef(null);
 
   useEffect(() => { localStorage.setItem('bi.tab', tab); }, [tab]);
 
@@ -77,10 +78,18 @@ export default function App() {
 
   const go = (kind, params) => {
     if (kind === 'game') { setGameSheetId(params.gameId); return; }
+    navDir.current = 'push';
     setStack(s => [...s, { kind, params }]);
   };
-  const goBack = () => setStack(s => s.slice(0, -1));
-  const setTabAndClear = (t) => { setStack([]); setTab(t); };
+  const goBack = () => {
+    navDir.current = 'pop';
+    setStack(s => s.slice(0, -1));
+  };
+  const setTabAndClear = (t) => {
+    navDir.current = 'tab';
+    setStack([]);
+    setTab(t);
+  };
 
   // ─── API actions ─────────────────────────────────────────────
   const handleAddGame = async ({ opponentId, scoreMe, scoreOpp }) => {
@@ -144,6 +153,11 @@ export default function App() {
   // ─── Screen routing ─────────────────────────────────────────
   const top = stack[stack.length - 1];
   const onRootTab = !top;
+  const screenKey = top ? `${top.kind}-${top.params?.playerId ?? top.params?.a ?? ''}` : `tab-${tab}`;
+  const screenCls = navDir.current === 'push' ? 'screen-push'
+                  : navDir.current === 'pop'  ? 'screen-pop'
+                  : navDir.current === 'tab'  ? 'screen-tab'
+                  : '';
 
   let screenNode;
   if (top) {
@@ -229,7 +243,9 @@ export default function App() {
       color: '#1A1612',
     }}>
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-        {screenNode}
+        <div key={screenKey} className={screenCls} style={{ position: 'absolute', inset: 0 }}>
+          {screenNode}
+        </div>
       </div>
 
       {showBottomNav && (

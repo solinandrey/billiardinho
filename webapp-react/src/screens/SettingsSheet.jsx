@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MUTED, INK, LINE } from '../theme.js';
 
 const PALETTE = ['#E8542A','#4F7FE8','#2ECC7A','#A855F7','#E5A83A','#E3457F','#2BB8CC','#6B8E23'];
@@ -17,13 +18,13 @@ export function SettingsSheet({ player, onClose, onSaved }) {
     onClose();
   };
 
-  return (
+  return createPortal((
     <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 200,
+      position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(10,8,5,0.42)', backdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className="sheet-enter" style={{
         background: '#FFFBF2', color: INK,
         borderRadius: '26px 26px 0 0',
         padding: '14px 20px 26px',
@@ -100,5 +101,5 @@ export function SettingsSheet({ player, onClose, onSaved }) {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
