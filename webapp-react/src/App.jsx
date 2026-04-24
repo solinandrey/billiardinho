@@ -36,6 +36,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [gameSheetId, setGameSheetId] = useState(null);
   const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const navDir = useRef(null);
 
   useEffect(() => { localStorage.setItem('bi.tab', tab); }, [tab]);
@@ -51,13 +52,40 @@ export default function App() {
     try {
       const d = await fetchAppData();
       setData(d);
+      setLoadError(null);
     } catch (e) {
       console.error('Data load error:', e);
-      setData({ mock: true, ...BData });
+      // В DEV без Telegram подставляем моковые данные; в проде — показываем ошибку.
+      if (!IS_TELEGRAM && import.meta.env.DEV) {
+        setData({ mock: true, ...BData });
+        setLoadError(null);
+      } else {
+        setLoadError(e?.message || String(e));
+      }
     }
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  if (loadError) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: CREAM,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column', gap: 14, padding: 24, textAlign: 'center',
+      }}>
+        <div style={{ fontFamily: 'Archivo Black', fontSize: 32 }}>😵</div>
+        <div style={{ fontFamily: 'Archivo Black', fontSize: 20 }}>Не удалось загрузить данные</div>
+        <div style={{ fontSize: 13, color: '#8A8070', fontWeight: 500, maxWidth: 300, wordBreak: 'break-word' }}>
+          {loadError}
+        </div>
+        <button onClick={reload} style={{
+          marginTop: 8, padding: '10px 20px', borderRadius: 14, border: 'none',
+          background: '#1A1612', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+        }}>Повторить</button>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
