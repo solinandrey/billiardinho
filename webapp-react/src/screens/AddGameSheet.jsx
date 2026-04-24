@@ -32,17 +32,33 @@ function ScoreBox({ player, val, setVal }) {
       borderRadius: 18, padding: '8px 6px 10px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
     }}>
-      <div style={{
-        fontFamily: 'Archivo Black', fontSize: 46, lineHeight: 1,
-        color: player.color, letterSpacing: -2, fontVariantNumeric: 'tabular-nums',
-      }}>{val}</div>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={val}
+        onFocus={e => e.target.select()}
+        onChange={e => {
+          const raw = e.target.value.replace(/[^0-9]/g, '');
+          if (raw === '') { setVal(0); return; }
+          const n = parseInt(raw, 10);
+          if (!Number.isNaN(n)) setVal(Math.min(99, n));
+        }}
+        style={{
+          width: '100%', border: 'none', outline: 'none', background: 'transparent',
+          textAlign: 'center', padding: 0,
+          fontFamily: 'Archivo Black', fontSize: 46, lineHeight: 1,
+          color: player.color, letterSpacing: -2, fontVariantNumeric: 'tabular-nums',
+          caretColor: player.color,
+        }}
+      />
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
         <button onClick={() => setVal(Math.max(0, val - 1))} style={{
           width: 26, height: 26, borderRadius: 13,
           background: '#EFE7D8', border: 'none', cursor: 'pointer',
           fontSize: 16, fontWeight: 700, color: INK, lineHeight: 1,
         }}>−</button>
-        <button onClick={() => setVal(Math.min(15, val + 1))} style={{
+        <button onClick={() => setVal(Math.min(99, val + 1))} style={{
           width: 26, height: 26, borderRadius: 13,
           background: '#EFE7D8', border: 'none', cursor: 'pointer',
           fontSize: 16, fontWeight: 700, color: INK, lineHeight: 1,
@@ -53,8 +69,8 @@ function ScoreBox({ player, val, setVal }) {
 }
 
 export function AddGameSheet({ me, players, onClose, onSaved }) {
-  const [s1, setS1] = useState(9);
-  const [s2, setS2] = useState(6);
+  const [s1, setS1] = useState(0);
+  const [s2, setS2] = useState(0);
   const [oppId, setOppId] = useState(players.find(p => p.id !== me.id)?.id || null);
   const [oppQuery, setOppQuery] = useState('');
   const [date, setDate] = useState(todayISO());
