@@ -58,53 +58,53 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
       <div ref={scrollRef} style={{ height: '100%', overflowY: 'auto' }}>
         {/* Colored header */}
         <div style={{
-          background: p.color, padding: '22px 18px',
+          background: p.color, padding: '14px 18px 18px',
           borderRadius: '0 0 26px 26px', position: 'relative', overflow: 'hidden',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'relative', minHeight: 38 }}>
-            {goBack ? (
-              <button onClick={goBack} style={{
-                width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.32)',
-                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative', zIndex: 1,
-              }}>{Icon.back('#fff')}</button>
-            ) : <div style={{ width: 38 }} />}
-            {fromRoot ? (
-              <div style={{ position: 'relative', width: 38, height: 38 }}>
-                {/* Concentric rings centered on the settings button */}
-                <svg
-                  style={{
-                    position: 'absolute', top: '50%', left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    opacity: 0.22, pointerEvents: 'none',
-                  }}
-                  width="220" height="220" viewBox="0 0 220 220"
-                >
-                  <circle cx="110" cy="110" r="95" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
-                  <circle cx="110" cy="110" r="70" stroke="#fff" strokeWidth="1.2" fill="none" />
-                  <circle cx="110" cy="110" r="45" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
-                </svg>
-                <button onClick={() => setSettingsOpen(true)} aria-label="Настройки" style={{
-                  position: 'relative', zIndex: 1,
-                  width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,0.32)',
-                  border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                }}>
-                  {Icon.gear('#fff')}
-                </button>
-              </div>
-            ) : <div style={{ width: 38 }} />}
-          </div>
+          {/* Decorative concentric rings — centered on avatar */}
+          <svg
+            style={{
+              position: 'absolute', left: 58, top: 58,
+              transform: 'translate(-50%, -50%)',
+              opacity: 0.18, pointerEvents: 'none',
+            }}
+            width="260" height="260" viewBox="0 0 220 220"
+          >
+            <circle cx="110" cy="110" r="95" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
+            <circle cx="110" cy="110" r="70" stroke="#fff" strokeWidth="1.2" fill="none" />
+            <circle cx="110" cy="110" r="45" stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="2 6" />
+          </svg>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+          {/* Floating back button (top-left corner) */}
+          {goBack && (
+            <button onClick={goBack} style={{
+              position: 'absolute', top: 12, left: 12, zIndex: 2,
+              width: 34, height: 34, borderRadius: 17, background: 'rgba(255,255,255,0.28)',
+              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{Icon.back('#fff')}</button>
+          )}
+
+          {/* Floating settings button (top-right corner) */}
+          {fromRoot && (
+            <button onClick={() => setSettingsOpen(true)} aria-label="Настройки" style={{
+              position: 'absolute', top: 12, right: 12, zIndex: 2,
+              width: 34, height: 34, borderRadius: 17, background: 'rgba(255,255,255,0.28)',
+              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+            }}>
+              {Icon.gear('#fff')}
+            </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', paddingLeft: goBack ? 36 : 0, paddingRight: fromRoot ? 36 : 0 }}>
             <div style={{
-              width: 80, height: 80, borderRadius: 40,
+              width: 72, height: 72, borderRadius: 36,
               background: '#fff', color: p.color,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Archivo Black', fontSize: 36, letterSpacing: -1,
-              boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+              fontFamily: 'Archivo Black', fontSize: 32, letterSpacing: -1,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.18)', flexShrink: 0,
             }}>{p.short}</div>
-            <div style={{ color: '#fff' }}>
-              <div style={{ fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.5 }}>{p.name}</div>
+            <div style={{ color: '#fff', minWidth: 0 }}>
+              <div style={{ fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6,
                 background: 'rgba(255,255,255,0.22)', padding: '4px 10px 4px 8px', borderRadius: 999,
