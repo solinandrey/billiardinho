@@ -93,11 +93,14 @@ export default function App() {
   };
 
   // ─── API actions ─────────────────────────────────────────────
-  const handleAddGame = async ({ opponentId, scoreMe, scoreOpp }) => {
+  const handleAddGame = async ({ opponentId, scoreMe, scoreOpp, playedAt }) => {
     if (data.mock) {
       const newId = 'g' + Date.now();
-      const today = new Date().toISOString().split('T')[0];
-      data.games.unshift({ id: newId, p1: meId, p2: opponentId, s1: scoreMe, s2: scoreOpp, date: today });
+      const iso = playedAt || new Date().toISOString();
+      const dateStr = iso.split('T')[0];
+      data.games.unshift({ id: newId, p1: meId, p2: opponentId, s1: scoreMe, s2: scoreOpp, date: dateStr, playedAt: iso });
+      // keep chronological order (newest first)
+      data.games.sort((a, b) => (b.playedAt || b.date).localeCompare(a.playedAt || a.date));
       setData({ ...data });
       return;
     }
@@ -105,7 +108,7 @@ export default function App() {
     await fetch('/api/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp }),
+      body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp, played_at: playedAt }),
     });
     await reload();
   };
