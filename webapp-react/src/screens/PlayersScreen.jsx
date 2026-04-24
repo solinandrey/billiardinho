@@ -57,7 +57,7 @@ export function PlayersScreen({ players, games, go }) {
                 <div style={{
                   fontFamily: 'Archivo Black', fontSize: 20, letterSpacing: -0.3,
                   color: eloColor(p.elo), fontVariantNumeric: 'tabular-nums',
-                }}>{p.elo.toFixed(1)}</div>
+                }}>{p.elo.toFixed(2)}</div>
                 <div style={{ fontSize: 10, color: MUTED, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', marginTop: -2 }}>рейтинг</div>
               </div>
               {Icon.chev(MUTED)}

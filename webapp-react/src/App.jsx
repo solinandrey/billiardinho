@@ -212,7 +212,7 @@ export default function App() {
   } else if (tab === 'players') {
     screenNode = <PlayersScreen players={players} games={games} go={go} />;
   } else if (tab === 'stats') {
-    screenNode = <StatsScreen players={players} games={games} months={months} eloSeries={eloSeries} activity={activity} />;
+    screenNode = <StatsScreen players={players} games={games} months={months} eloSeries={eloSeries} activity={activity} go={go} />;
   } else if (tab === 'profile') {
     screenNode = (
       <ProfileScreen

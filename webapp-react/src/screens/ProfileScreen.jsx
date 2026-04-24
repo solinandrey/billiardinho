@@ -50,7 +50,7 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
         <div style={{ flex: 1, minWidth: 0, color: '#fff' }}>
           <div style={{ fontFamily: 'Archivo Black', fontSize: 16, letterSpacing: -0.3, lineHeight: 1.1 }}>{p.name}</div>
           <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 600, letterSpacing: 0.3 }}>
-            Рейтинг {p.elo.toFixed(1)} · {p.games} игр · {winPct}%
+            Рейтинг {p.elo.toFixed(2)} · {p.games} игр · {winPct}%
           </div>
         </div>
       </div>
@@ -110,7 +110,7 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
                 background: 'rgba(255,255,255,0.22)', padding: '4px 10px 4px 8px', borderRadius: 999,
               }}>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>Рейтинг</span>
-                <span style={{ fontFamily: 'Archivo Black', fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{p.elo.toFixed(1)}</span>
+                <span style={{ fontFamily: 'Archivo Black', fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{p.elo.toFixed(2)}</span>
               </div>
             </div>
           </div>

@@ -42,7 +42,7 @@ export function HomeScreen({ me, players, games, byId, winnerOf, relativeDate, g
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85, letterSpacing: 0.4, textTransform: 'uppercase' }}>Мой рейтинг</div>
             <div style={{ fontFamily: 'Archivo Black', fontSize: 34, lineHeight: 1, letterSpacing: -0.8, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-              {me.elo.toFixed(1)}
+              {me.elo.toFixed(2)}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
               {[

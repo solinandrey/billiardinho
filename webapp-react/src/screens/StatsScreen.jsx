@@ -4,7 +4,7 @@ import { Avatar } from '../components/Avatar.jsx';
 
 const CREAM2_C = '#EFE7D8';
 
-export function StatsScreen({ players, games, months, eloSeries, activity }) {
+export function StatsScreen({ players, games, months, eloSeries, activity, go }) {
   const sorted = [...players].sort((a, b) => b.elo - a.elo);
   const maxActivity = Math.max(...activity, 1);
 
@@ -23,11 +23,23 @@ export function StatsScreen({ players, games, months, eloSeries, activity }) {
           {sorted.map((p, idx) => {
             const series = eloSeries[p.id] || [];
             const delta = series.length >= 2 ? series[series.length - 1] - series[series.length - 2] : 0;
-            const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(1);
+            const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(2);
             const deltaColor = delta > 0.05 ? '#2E9B5E' : (delta < -0.05 ? '#D14A3A' : MUTED);
             const widthPct = (p.elo / 10) * 100;
             return (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div key={p.id}
+                onClick={() => go && go('profile', { playerId: p.id })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  cursor: go ? 'pointer' : 'default',
+                  margin: '0 -6px', padding: '4px 6px', borderRadius: 10,
+                }}
+                onMouseDown={e => { if (go) e.currentTarget.style.background = 'rgba(26,22,18,0.04)'; }}
+                onMouseUp={e => { e.currentTarget.style.background = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                onTouchStart={e => { if (go) e.currentTarget.style.background = 'rgba(26,22,18,0.04)'; }}
+                onTouchEnd={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
                 <div style={{ fontFamily: 'Archivo Black', fontSize: 13, color: MUTED, width: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</div>
                 <Avatar player={p} size={28} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -42,7 +54,7 @@ export function StatsScreen({ players, games, months, eloSeries, activity }) {
                 <div style={{
                   fontFamily: 'Archivo Black', fontSize: 16, color: INK,
                   fontVariantNumeric: 'tabular-nums', letterSpacing: -0.3, width: 40, textAlign: 'right'
-                }}>{p.elo.toFixed(1)}</div>
+                }}>{p.elo.toFixed(2)}</div>
               </div>
             );
           })}
