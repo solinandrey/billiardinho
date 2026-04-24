@@ -43,15 +43,40 @@ export function H2HScreen({ a, b, byId, games, winnerOf, relativeDate, go, goBac
   const avg1 = filteredGames.length ? (sum1 / filteredGames.length).toFixed(1) : '0';
   const avg2 = filteredGames.length ? (sum2 / filteredGames.length).toFixed(1) : '0';
 
-  // Current streak
-  let streak = 0, streakOwner = null;
-  for (const g of filteredGames) {
-    const w = winnerOf(g);
-    if (!w) break;
-    if (streakOwner === null) { streakOwner = w; streak = 1; }
-    else if (w === streakOwner) streak++;
-    else break;
+  // Longest winning streak ever (in either direction).
+  // filteredGames is newest-first; iterate oldest-first to find max run of same winner.
+  let longestStreak = 0, longestOwner = null;
+  {
+    let curOwner = null, curLen = 0;
+    for (const g of [...filteredGames].reverse()) {
+      const w = winnerOf(g);
+      if (!w) { curOwner = null; curLen = 0; continue; }
+      if (w === curOwner) curLen++;
+      else { curOwner = w; curLen = 1; }
+      if (curLen > longestStreak) { longestStreak = curLen; longestOwner = w; }
+    }
   }
+
+  // Records
+  const winsByP1 = filteredGames.filter(g => winnerOf(g) === a);
+  const winsByP2 = filteredGames.filter(g => winnerOf(g) === b);
+  const biggestWin = (arr, pid) => {
+    if (!arr.length) return null;
+    let best = arr[0];
+    let bestMargin = Math.abs(best.s1 - best.s2);
+    for (const g of arr) {
+      const m = Math.abs(g.s1 - g.s2);
+      if (m > bestMargin) { best = g; bestMargin = m; }
+    }
+    const myScore  = best.p1 === pid ? best.s1 : best.s2;
+    const oppScore = best.p1 === pid ? best.s2 : best.s1;
+    return { game: best, margin: bestMargin, myScore, oppScore };
+  };
+  const bigA = biggestWin(winsByP1, a);
+  const bigB = biggestWin(winsByP2, b);
+  const topScoring = filteredGames.length
+    ? filteredGames.reduce((m, g) => (g.s1 + g.s2) > (m.s1 + m.s2) ? g : m, filteredGames[0])
+    : null;
 
   // Bar chart (oldest → newest)
   const barGames = filteredGames.slice().reverse();
@@ -115,14 +140,79 @@ export function H2HScreen({ a, b, byId, games, winnerOf, relativeDate, go, goBac
         {[
           { label: 'Средний счёт', val: `${avg1} : ${avg2}` },
           { label: 'Ничьи', val: d },
-          { label: 'Серия', val: streakOwner ? `${streak} · ${byId[streakOwner].short}` : '—' },
+          {
+            label: 'Макс. серия',
+            val: longestOwner ? `${longestStreak} · ${byId[longestOwner].short}` : '—',
+            hint: longestOwner ? `подряд у ${byId[longestOwner].name}` : null,
+          },
         ].map((s, i) => (
-          <Card key={i} style={{ padding: '10px 10px', textAlign: 'center' }}>
+          <Card key={i} style={{ padding: '10px 10px', textAlign: 'center' }} title={s.hint || undefined}>
             <div style={{ fontFamily: 'Archivo Black', fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{s.val}</div>
             <div style={{ fontSize: 10, color: MUTED, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
           </Card>
         ))}
       </div>
+
+      {/* Records */}
+      {(bigA || bigB || topScoring) && (
+        <div style={{ padding: '4px 20px 0' }}>
+          <div style={{ fontFamily: 'Archivo Black', fontSize: 15, letterSpacing: -0.2, margin: '8px 0 8px' }}>Рекорды</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Biggest wins row */}
+            {(bigA || bigB) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[{ big: bigA, player: p1 }, { big: bigB, player: p2 }].map(({ big, player }, i) => (
+                  <Card key={i} onClick={big ? () => go('game', { gameId: big.game.id }) : undefined}
+                    style={{ padding: '10px 12px', cursor: big ? 'pointer' : 'default', opacity: big ? 1 : 0.5 }}>
+                    <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                      Крупнейшая победа
+                    </div>
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontFamily: 'Archivo Black', fontSize: 18, fontVariantNumeric: 'tabular-nums', color: player.color }}>
+                        {big ? `${big.myScore}:${big.oppScore}` : '—'}
+                      </div>
+                      {big && (
+                        <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700 }}>
+                          +{big.margin}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: INK, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {player.name}
+                    </div>
+                    {big && (
+                      <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>
+                        {relativeDate(big.game.date)}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Top-scoring match */}
+            {topScoring && (
+              <Card onClick={() => go('game', { gameId: topScoring.id })} style={{ padding: '10px 12px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                      Самый результативный матч
+                    </div>
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      {relativeDate(topScoring.date)} · всего {topScoring.s1 + topScoring.s2} очков
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'Archivo Black', fontSize: 22, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.5 }}>
+                    <span style={{ color: topScoring.p1 === a ? p1.color : p2.color }}>{topScoring.s1}</span>
+                    <span style={{ color: MUTED, padding: '0 4px', fontSize: 14 }}>:</span>
+                    <span style={{ color: topScoring.p2 === a ? p1.color : p2.color }}>{topScoring.s2}</span>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Period selector */}
       <div style={{ padding: '10px 20px 0', display: 'flex', gap: 6 }}>
