@@ -73,7 +73,8 @@ export default function App() {
   }
 
   const { players, games, months, eloSeries, activity, byId, me: meId,
-    winnerOf, gamesBetween, recordBetween, recentGamesOf, rivalsOf, formatDate, relativeDate } = data;
+    winnerOf, gamesBetween, recordBetween, recentGamesOf, rivalsOf, ratingHistoryOf,
+    formatDate, relativeDate } = data;
   const me = byId[meId];
 
   const go = (kind, params) => {
@@ -175,6 +176,7 @@ export default function App() {
           gamesBetween={gamesBetween}
           rivalsOf={rivalsOf}
           recentGamesOf={recentGamesOf}
+          ratingHistoryOf={ratingHistoryOf}
           go={go}
           goBack={goBack}
           fromRoot={top.params.playerId === meId && stack.length === 1}
@@ -225,6 +227,7 @@ export default function App() {
         gamesBetween={gamesBetween}
         rivalsOf={rivalsOf}
         recentGamesOf={recentGamesOf}
+        ratingHistoryOf={ratingHistoryOf}
         go={go}
         fromRoot
         onSaveSettings={handleSaveSettings}

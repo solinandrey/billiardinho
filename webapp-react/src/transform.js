@@ -87,12 +87,35 @@ export function transformApiData(apiData) {
     monthlyActivity.push(count);
   }
 
-  // Compute per-player Elo series over last 6 months
-  // (simplified: just use current rating for all months since we don't store history yet)
+  // Compute per-player Elo series over last 6 months (kept for legacy screens)
   const eloSeries = {};
   for (const p of players) {
     eloSeries[p.id] = months.map(() => p.elo);
   }
+
+  // Real per-player rating history: ordered points {date, rating} across all sessions.
+  // Sessions in `games` are newest-first; history needs oldest-first.
+  const ratingHistoryOf = (playerId) => {
+    const points = [];
+    const asc = [...games].sort((a, b) => a.date.localeCompare(b.date));
+    let seeded = false;
+    for (const g of asc) {
+      if (g.p1 === playerId && g.r1_after != null) {
+        if (!seeded && g.r1_before != null) {
+          points.push({ date: g.date, rating: g.r1_before });
+          seeded = true;
+        }
+        points.push({ date: g.date, rating: g.r1_after });
+      } else if (g.p2 === playerId && g.r2_after != null) {
+        if (!seeded && g.r2_before != null) {
+          points.push({ date: g.date, rating: g.r2_before });
+          seeded = true;
+        }
+        points.push({ date: g.date, rating: g.r2_after });
+      }
+    }
+    return points;
+  };
 
   // ─── Helper functions (same as BData) ─────────────────────
   const winnerOf = (g) => {
@@ -142,6 +165,7 @@ export function transformApiData(apiData) {
     recordBetween,
     recentGamesOf,
     rivalsOf,
+    ratingHistoryOf,
     formatDate,
     relativeDate,
   };

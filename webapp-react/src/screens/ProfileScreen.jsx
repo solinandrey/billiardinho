@@ -6,11 +6,12 @@ import { FeedCard } from '../components/FeedCard.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { SettingsSheet } from './SettingsSheet.jsx';
 
-export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, relativeDate, recordBetween, gamesBetween, rivalsOf, recentGamesOf, go, goBack, fromRoot, onSaveSettings }) {
+export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, relativeDate, recordBetween, gamesBetween, rivalsOf, recentGamesOf, ratingHistoryOf, go, goBack, fromRoot, onSaveSettings }) {
   const p = byId[playerId];
   const winPct = p.games ? Math.round(p.wins * 100 / p.games) : 0;
   const rivals = rivalsOf(p.id).filter(r => r.total > 0);
   const recent = recentGamesOf(p.id, 10);
+  const history = ratingHistoryOf ? ratingHistoryOf(p.id) : [];
   const scrollRef = useRef(null);
   const [scrolled, setScrolled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -133,6 +134,60 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
               </div>
             ))}
           </div>
+
+          {/* Rating history sparkline */}
+          {history.length >= 2 && (() => {
+            const W = 320, H = 56, PADX = 6, PADY = 8;
+            const vals = history.map(h => h.rating);
+            const minR = Math.min(...vals);
+            const maxR = Math.max(...vals);
+            const span = Math.max(0.4, maxR - minR); // min 0.4 range для визуальной амплитуды
+            const midR = (minR + maxR) / 2;
+            const lo = midR - span / 2;
+            const xFor = i => PADX + (i / (history.length - 1)) * (W - 2 * PADX);
+            const yFor = r => PADY + (1 - (r - lo) / span) * (H - 2 * PADY);
+            const dPath = history.map((h, i) => `${i ? 'L' : 'M'} ${xFor(i).toFixed(1)} ${yFor(h.rating).toFixed(1)}`).join(' ');
+            const areaPath = `${dPath} L ${xFor(history.length - 1).toFixed(1)} ${(H - PADY).toFixed(1)} L ${xFor(0).toFixed(1)} ${(H - PADY).toFixed(1)} Z`;
+            const first = history[0].rating;
+            const last  = history[history.length - 1].rating;
+            const delta = Math.round((last - first) * 100) / 100;
+            const deltaSign = delta > 0 ? '+' : delta < 0 ? '−' : '±';
+            const deltaAbs = Math.abs(delta).toFixed(2);
+
+            return (
+              <div style={{ marginTop: 14, position: 'relative' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  color: '#fff', marginBottom: 4,
+                }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', opacity: 0.85 }}>
+                    Рейтинг · {history.length} партий
+                  </span>
+                  <span style={{
+                    fontFamily: 'Archivo Black', fontSize: 12, fontVariantNumeric: 'tabular-nums',
+                    padding: '2px 8px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.24)',
+                  }}>
+                    {deltaSign}{deltaAbs}
+                  </span>
+                </div>
+                <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+                  <path d={areaPath} fill="rgba(255,255,255,0.16)" />
+                  <path d={dPath} fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  {/* last-point dot */}
+                  <circle cx={xFor(history.length - 1)} cy={yFor(last)} r="3" fill="#fff" />
+                </svg>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: 600, letterSpacing: 0.3,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  <span>{first.toFixed(2)}</span>
+                  <span>{last.toFixed(2)}</span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div style={{ padding: '22px 20px 110px' }}>
