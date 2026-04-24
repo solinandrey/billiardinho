@@ -5,7 +5,8 @@
   "main": "src/bot.js",
   "scripts": {
     "start": "node import.js && node src/bot.js",
-    "dev": "node --watch --env-file=.env src/bot.js"
+    "dev": "node --watch --env-file=.env.dev src/bot.js",
+    "dev:sync-db": "cp data/billiard.db data/billiard-dev.db && echo '✅ Dev DB synced from prod'"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",

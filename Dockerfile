@@ -5,11 +5,19 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
+# Install bot dependencies
 COPY package*.json ./
 RUN npm install
 
+# Install and build React webapp
+COPY webapp-react/package*.json ./webapp-react/
+RUN npm --prefix webapp-react install
+
+COPY webapp-react/ ./webapp-react/
+RUN npm --prefix webapp-react run build
+
+# Copy bot source
 COPY src/ ./src/
-COPY webapp/ ./webapp/
 COPY import.js ./
 COPY migrate.js ./
 

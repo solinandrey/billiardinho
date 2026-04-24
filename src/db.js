@@ -6,21 +6,51 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../data/billiard.db");
 
 // ─── Elo helpers (шкала 1.0 – 10.0) ──────────────────────────────────────────
-export const ELO_START = 5.0;
-const ELO_K = 0.5;
-const ELO_D = 3.0;
+// Плавная K-кривая: чем выше рейтинг, тем медленнее растёт.
+// Провизионный период: первые 5 игр — в 5× быстрее.
+// Множитель маржи: log-кривая по разнице счёта.
+export const ELO_START          = 3.0;
+const ELO_K_BASE                = 0.20;   // K для новичка на рейтинге ~1.0
+const ELO_K_FLOOR_RATIO         = 0.25;   // минимум 25% от базы (на топе шкалы)
+const ELO_K_PROVISIONAL         = 1.0;    // первые 5 игр
+const ELO_PROVISIONAL_GAMES     = 5;
+const ELO_D                     = 3.0;    // разница 3.0 → ~90% шанс
 
 function expectedScore(rA, rB) {
   return 1 / (1 + Math.pow(10, (rB - rA) / ELO_D));
 }
 
-export function computeNewRatings(r1, r2, score1, score2) {
+// Плавный K: 0.20 на r=3, 0.10 на r≈5, 0.05 на r≥8.25 (флор)
+function kForRating(r) {
+  return ELO_K_BASE * Math.max(ELO_K_FLOOR_RATIO, (10 - r) / 7);
+}
+
+// Множитель разницы в счёте: log-кривая, ничья = 1.0
+function marginMultiplier(score1, score2) {
+  const m = Math.abs(score1 - score2);
+  if (m <= 1) return 1.0;
+  return 1 + Math.log(m) * 0.3;
+}
+
+/**
+ * @param {number} r1, r2          — текущие рейтинги
+ * @param {number} score1, score2  — счёт партии
+ * @param {number} games1, games2  — сколько игр сыграно ДО этой партии
+ * @returns {{ newR1, newR2, d1, d2 }} новые рейтинги и дельты (округлённые)
+ */
+export function computeNewRatings(r1, r2, score1, score2, games1 = 999, games2 = 999) {
   const s1 = score1 > score2 ? 1 : score1 < score2 ? 0 : 0.5;
   const s2 = 1 - s1;
+  const mMult = marginMultiplier(score1, score2);
+  const k1 = (games1 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : kForRating(r1)) * mMult;
+  const k2 = (games2 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : kForRating(r2)) * mMult;
   const clamp = v => Math.round(Math.min(10, Math.max(1, v)) * 100) / 100;
+  const newR1 = clamp(r1 + k1 * (s1 - expectedScore(r1, r2)));
+  const newR2 = clamp(r2 + k2 * (s2 - expectedScore(r2, r1)));
   return {
-    newR1: clamp(r1 + ELO_K * (s1 - expectedScore(r1, r2))),
-    newR2: clamp(r2 + ELO_K * (s2 - expectedScore(r2, r1))),
+    newR1, newR2,
+    d1: Math.round((newR1 - r1) * 100) / 100,
+    d2: Math.round((newR2 - r2) * 100) / 100,
   };
 }
 
@@ -61,6 +91,46 @@ class BilliardDB {
         created_at TEXT NOT NULL
       );
     `);
+
+    // Доп. колонки рейтинга до/после — добавляем, если нет (идемпотентно)
+    const cols = this.db.pragma("table_info(sessions)");
+    const colNames = cols.map(c => c.name);
+    for (const col of ["r1_before", "r1_after", "r2_before", "r2_after"]) {
+      if (!colNames.includes(col)) {
+        this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col} REAL`);
+      }
+    }
+
+    // Старые БД имеют pair_id INTEGER NOT NULL — это мешает вставке партий
+    // без пары. Пересобираем таблицу, если constraint есть.
+    const pairIdCol = cols.find(c => c.name === "pair_id");
+    if (pairIdCol && pairIdCol.notnull === 1) {
+      this.db.exec(`
+        BEGIN;
+        CREATE TABLE sessions_new (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          pair_id    INTEGER REFERENCES pairs(id),
+          score1     INTEGER NOT NULL,
+          score2     INTEGER NOT NULL,
+          played_at  TEXT NOT NULL,
+          user1_id   INTEGER REFERENCES users(id),
+          user2_id   INTEGER REFERENCES users(id),
+          r1_before  REAL,
+          r1_after   REAL,
+          r2_before  REAL,
+          r2_after   REAL
+        );
+        INSERT INTO sessions_new
+          (id, pair_id, score1, score2, played_at, user1_id, user2_id,
+           r1_before, r1_after, r2_before, r2_after)
+        SELECT id, pair_id, score1, score2, played_at, user1_id, user2_id,
+           r1_before, r1_after, r2_before, r2_after
+        FROM sessions;
+        DROP TABLE sessions;
+        ALTER TABLE sessions_new RENAME TO sessions;
+        COMMIT;
+      `);
+    }
   }
 
   // ─── Users ───────────────────────────────────────────────────────────────────
@@ -98,6 +168,13 @@ class BilliardDB {
     this.db.prepare("UPDATE users SET uid = ? WHERE id = ?").run(uid, userId);
   }
 
+  countGamesForUser(userId) {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM sessions WHERE (user1_id = ? OR user2_id = ?) AND user1_id IS NOT NULL'
+    ).get(userId, userId);
+    return row?.cnt ?? 0;
+  }
+
   updateUserRatings(user1Id, newR1, user2Id, newR2) {
     this.db.prepare("UPDATE users SET rating = ? WHERE id = ?").run(newR1, user1Id);
     this.db.prepare("UPDATE users SET rating = ? WHERE id = ?").run(newR2, user2Id);
@@ -105,10 +182,16 @@ class BilliardDB {
 
   // ─── Sessions (новый формат) ──────────────────────────────────────────────────
 
-  insertSessionForUsers(user1Id, user2Id, score1, score2, played_at) {
-    const res = this.db.prepare(
-      "INSERT INTO sessions (score1, score2, played_at, user1_id, user2_id) VALUES (?, ?, ?, ?, ?)"
-    ).run(score1, score2, played_at || new Date().toISOString(), user1Id, user2Id);
+  insertSessionForUsers(user1Id, user2Id, score1, score2, played_at, ratings = null) {
+    const r1b = ratings?.r1_before ?? null;
+    const r1a = ratings?.r1_after  ?? null;
+    const r2b = ratings?.r2_before ?? null;
+    const r2a = ratings?.r2_after  ?? null;
+    const res = this.db.prepare(`
+      INSERT INTO sessions
+        (score1, score2, played_at, user1_id, user2_id, r1_before, r1_after, r2_before, r2_after)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(score1, score2, played_at || new Date().toISOString(), user1Id, user2Id, r1b, r1a, r2b, r2a);
     return this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(res.lastInsertRowid);
   }
 

@@ -1,0 +1,15 @@
+export const Icon = {
+  home: (c) => <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L11 3l8 6.5V18a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 18V9.5Z"/><path d="M8.5 19.5v-5.5h5v5.5"/></svg>,
+  trophy: (c) => <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M6 6H3.5C3 8 4 10 6 10.5M16 6h2.5c.5 2-.5 4-2.5 4.5"/><path d="M8.5 13h5l-.5 3h-4l-.5-3Z"/><path d="M7 19h8"/></svg>,
+  chart: (c) => <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18V8M10 18v-6M16 18V4"/><path d="M3 19.5h16"/></svg>,
+  plus: (c) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+  back: (c) => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4l-6 6 6 6"/></svg>,
+  chev: (c) => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l5 4-5 4"/></svg>,
+  calendar: (c) => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"><rect x="2.5" y="4" width="13" height="11" rx="2"/><path d="M6 2.5v3M12 2.5v3M2.5 8h13"/></svg>,
+  crown: (c) => <svg width="18" height="14" viewBox="0 0 18 14" fill={c}><path d="M1.5 4l2.5 3.5L7 2l2 5.5L11 2l3 5.5L16.5 4v7.5a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V4Z"/></svg>,
+  user: (c) => <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="8" r="3.5"/><path d="M4 19c1.5-3.2 4-4.5 7-4.5s5.5 1.3 7 4.5"/></svg>,
+  search: (c) => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="5"/><path d="M12 12l4 4"/></svg>,
+  gear: (c) => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="14" x2="17" y2="14"/><circle cx="13" cy="6" r="2.2" fill={c} stroke="none"/><circle cx="7" cy="10" r="2.2" fill={c} stroke="none"/><circle cx="12" cy="14" r="2.2" fill={c} stroke="none"/></svg>,
+  pencil: (c) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.5 2.5l3 3L6 13l-3.5.5L3 10z"/><path d="M9 4l3 3"/></svg>,
+  trash: (c) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.5h10M6.5 4.5V3.2a.9.9 0 0 1 .9-.9h1.2a.9.9 0 0 1 .9.9V4.5M4.3 4.5l.7 8.5a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9l.7-8.5"/><path d="M6.5 7v4.5M9.5 7v4.5"/></svg>,
+};

@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #F5EFE4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input {
+  font-family: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ─── Screen transitions ──────────────────────────── */
+@keyframes screenPush {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes screenPop {
+  from { transform: translateX(-24px); opacity: 0.75; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes screenTab {
+  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+.screen-push { animation: screenPush 260ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.screen-pop  { animation: screenPop  220ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.screen-tab  { animation: screenTab  220ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* ─── Sheet slide-up ──────────────────────────────── */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.sheet-enter { animation: slideUp 300ms cubic-bezier(0.32, 0.72, 0, 1) both; }
