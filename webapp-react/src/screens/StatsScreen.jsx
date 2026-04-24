@@ -71,7 +71,7 @@ export function StatsScreen({ players, games, months, eloSeries, activity }) {
       {/* Total games counter */}
       <Card style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>Всего партий</div>
+          <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>Всего матчей</div>
           <div style={{ fontFamily: 'Archivo Black', fontSize: 32, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>{games.length}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
