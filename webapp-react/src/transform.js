@@ -49,7 +49,7 @@ export function transformApiData(apiData) {
   const byId = Object.fromEntries(players.map(p => [p.id, p]));
   const meId = meUser ? String(meUser.id) : (players[0]?.id ?? '0');
 
-  // Convert sessions to game format
+  // Convert sessions to game format (+ Elo before/after for each side)
   const games = rawSessions.map(s => ({
     id: String(s.id),
     p1: String(s.user1_id),
@@ -57,6 +57,9 @@ export function transformApiData(apiData) {
     s1: s.score1,
     s2: s.score2,
     date: (s.played_at || '').split('T')[0],
+    playedAt: s.played_at,
+    r1_before: s.r1_before, r1_after: s.r1_after,
+    r2_before: s.r2_before, r2_after: s.r2_after,
   }));
 
   // Compute game/win counts

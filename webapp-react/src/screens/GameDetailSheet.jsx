@@ -34,7 +34,31 @@ function EditScoreCol({ player, val, setVal }) {
   );
 }
 
-function PlayerTag({ p, isWinner, onClick }) {
+function EloDelta({ before, after }) {
+  if (before == null || after == null) {
+    return <div style={{ height: 14, marginTop: 3 }} />;
+  }
+  const delta = Math.round((after - before) * 100) / 100;
+  const up = delta > 0;
+  const dn = delta < 0;
+  const sign = up ? '+' : dn ? '−' : '±';
+  const abs = Math.abs(delta).toFixed(2);
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 700, letterSpacing: 0.2, marginTop: 4,
+      color: 'rgba(255,255,255,0.9)', fontVariantNumeric: 'tabular-nums',
+    }}>
+      <span style={{ opacity: 0.75 }}>{after.toFixed(2)}</span>
+      <span style={{
+        marginLeft: 5, padding: '1px 6px', borderRadius: 8,
+        background: up ? 'rgba(255,255,255,0.22)' : dn ? 'rgba(0,0,0,0.18)' : 'transparent',
+        color: '#fff',
+      }}>{sign}{abs}</span>
+    </div>
+  );
+}
+
+function PlayerTag({ p, isWinner, onClick, eloBefore, eloAfter }) {
   return (
     <div onClick={onClick} style={{
       textAlign: 'center', cursor: onClick ? 'pointer' : 'default',
@@ -75,6 +99,9 @@ function PlayerTag({ p, isWinner, onClick }) {
       }}>
         {p.name}{onClick ? <span style={{ opacity: 0.6 }}> ›</span> : null}
       </div>
+
+      {/* Elo delta */}
+      <EloDelta before={eloBefore} after={eloAfter} />
     </div>
   );
 }
@@ -192,10 +219,14 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
 
           <div style={{ display: 'flex', alignItems: 'flex-start' }}>
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <PlayerTag p={p1} isWinner={winner === p1.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p1.id }); }} />
+              <PlayerTag p={p1} isWinner={winner === p1.id}
+                eloBefore={editing ? null : game.r1_before} eloAfter={editing ? null : game.r1_after}
+                onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p1.id }); }} />
             </div>
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <PlayerTag p={p2} isWinner={winner === p2.id} onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p2.id }); }} />
+              <PlayerTag p={p2} isWinner={winner === p2.id}
+                eloBefore={editing ? null : game.r2_before} eloAfter={editing ? null : game.r2_after}
+                onClick={editing ? null : () => { onClose(); go && go('profile', { playerId: p2.id }); }} />
             </div>
           </div>
 
