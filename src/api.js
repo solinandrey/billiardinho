@@ -127,16 +127,18 @@ function handleApi(req, res, url, apiPath) {
       const meGames  = db.countGamesForUser(me.id);
       const oppGames = db.countGamesForUser(opp.id);
 
+      const { newR1, newR2, d1, d2 } = computeNewRatings(me.rating, opp.rating, score_me, score_opp, meGames, oppGames);
+
       const session = db.insertSessionForUsers(
         me.id, opp.id,
         score_me, score_opp,
-        played_at || new Date().toISOString()
+        played_at || new Date().toISOString(),
+        { r1_before: me.rating, r1_after: newR1, r2_before: opp.rating, r2_after: newR2 }
       );
 
-      const { newR1, newR2 } = computeNewRatings(me.rating, opp.rating, score_me, score_opp, meGames, oppGames);
       db.updateUserRatings(me.id, newR1, opp.id, newR2);
 
-      json({ session, my_rating: newR1, opp_rating: newR2 });
+      json({ session, my_rating: newR1, opp_rating: newR2, d1, d2 });
     });
     return;
   }

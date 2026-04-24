@@ -19,10 +19,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data/billiard.db");
 const db = new Database(DB_PATH);
 
-// ─── Elo helpers (шкала 1.0 – 10.0, chess.com-style) ─────────────────────────
+// ─── Elo helpers (шкала 1.0 – 10.0) ──────────────────────────────────────────
+// Должно совпадать с src/db.js
 const ELO_START          = 3.0;
-const ELO_K_PROVISIONAL  = 2.0;  // первые 5 игр
-const ELO_K_ESTABLISHED  = 0.5;  // после 5 игр
+const ELO_K_BASE         = 0.20;
+const ELO_K_FLOOR_RATIO  = 0.25;
+const ELO_K_PROVISIONAL  = 1.0;
 const ELO_PROVISIONAL_GAMES = 5;
 const ELO_D              = 3.0;
 
@@ -30,11 +32,22 @@ function expectedScore(rA, rB) {
   return 1 / (1 + Math.pow(10, (rB - rA) / ELO_D));
 }
 
+function kForRating(r) {
+  return ELO_K_BASE * Math.max(ELO_K_FLOOR_RATIO, (10 - r) / 7);
+}
+
+function marginMultiplier(score1, score2) {
+  const m = Math.abs(score1 - score2);
+  if (m <= 1) return 1.0;
+  return 1 + Math.log(m) * 0.3;
+}
+
 function computeNewRatings(r1, r2, score1, score2, games1 = 999, games2 = 999) {
   const s1 = score1 > score2 ? 1 : score1 < score2 ? 0 : 0.5;
   const s2 = 1 - s1;
-  const k1 = games1 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
-  const k2 = games2 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : ELO_K_ESTABLISHED;
+  const mMult = marginMultiplier(score1, score2);
+  const k1 = (games1 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : kForRating(r1)) * mMult;
+  const k2 = (games2 < ELO_PROVISIONAL_GAMES ? ELO_K_PROVISIONAL : kForRating(r2)) * mMult;
   const clamp = v => Math.round(Math.min(10, Math.max(1, v)) * 100) / 100;
   return {
     newR1: clamp(r1 + k1 * (s1 - expectedScore(r1, r2))),
@@ -64,6 +77,12 @@ if (!cols.includes("user1_id")) {
 if (!cols.includes("user2_id")) {
   db.exec("ALTER TABLE sessions ADD COLUMN user2_id INTEGER REFERENCES users(id)");
   console.log("✅ sessions.user2_id добавлен");
+}
+for (const col of ["r1_before", "r1_after", "r2_before", "r2_after"]) {
+  if (!cols.includes(col)) {
+    db.exec(`ALTER TABLE sessions ADD COLUMN ${col} REAL`);
+    console.log(`✅ sessions.${col} добавлен`);
+  }
 }
 
 // ─── Шаг 3: перенос игроков из pairs → users ─────────────────────────────────
@@ -146,7 +165,10 @@ const gameCounts = new Map();
 const getR = id => ratings.get(id) ?? ELO_START;
 const getG = id => gameCounts.get(id) ?? 0;
 
-const updateRating = db.prepare("UPDATE users SET rating = ? WHERE id = ?");
+const updateRating  = db.prepare("UPDATE users SET rating = ? WHERE id = ?");
+const updateSession = db.prepare(
+  "UPDATE sessions SET r1_before = ?, r1_after = ?, r2_before = ?, r2_after = ? WHERE id = ?"
+);
 
 for (const s of allSessions) {
   const r1 = getR(s.user1_id);
@@ -160,6 +182,7 @@ for (const s of allSessions) {
   gameCounts.set(s.user2_id, g2 + 1);
   updateRating.run(newR1, s.user1_id);
   updateRating.run(newR2, s.user2_id);
+  updateSession.run(r1, newR1, r2, newR2, s.id);
 }
 
 // Вывести итоговые рейтинги
