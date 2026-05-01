@@ -169,8 +169,6 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
           </g>
         </svg>
 
-        <div style={{ width: 44, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.45)', margin: '0 auto 14px' }} />
-
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, position: 'relative' }}>
           <div>
             <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', opacity: 0.75 }}>Партия</div>
@@ -198,6 +196,14 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
               }}>
                 {Icon.trash('#fff')}
               </button>
+            )}
+            {!editing && (
+              <button onClick={() => { haptic.light(); onClose(); }} aria-label="Закрыть" style={{
+                width: 34, height: 34, borderRadius: 17,
+                background: 'rgba(255,255,255,0.22)', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                color: '#fff', fontSize: 19, lineHeight: 1, fontWeight: 500,
+              }}>×</button>
             )}
           </div>
         </div>

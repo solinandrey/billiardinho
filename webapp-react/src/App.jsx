@@ -55,8 +55,12 @@ export default function App() {
 
   useEffect(() => {
     if (IS_TELEGRAM) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand();
+      // Prevent swipe-down from minimising the mini app — sheets feel native this way.
+      // Available since Telegram Bot API 7.7; older clients silently ignore.
+      try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch { /* ignore */ }
     }
   }, []);
 

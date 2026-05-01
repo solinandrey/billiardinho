@@ -43,19 +43,26 @@ export function SettingsSheet({ player, onClose, onSaved }) {
         padding: '14px 20px 26px',
         boxShadow: '0 -20px 50px rgba(0,0,0,0.28)',
       }}>
-        <div style={{ width: 44, height: 4, borderRadius: 2, background: 'rgba(26,22,18,0.18)', margin: '0 auto 14px' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
             <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: MUTED }}>Настройки</div>
             <div style={{ fontFamily: 'Archivo Black', fontSize: 20, letterSpacing: -0.3, marginTop: 2 }}>Профиль</div>
           </div>
-          <div style={{
-            width: 54, height: 54, borderRadius: 27,
-            background: color, color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.6,
-            transition: 'background 160ms ease',
-          }}>{short || '—'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 54, height: 54, borderRadius: 27,
+              background: color, color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.6,
+              transition: 'background 160ms ease',
+            }}>{short || '—'}</div>
+            <button onClick={onClose} aria-label="Закрыть" style={{
+              width: 32, height: 32, borderRadius: 16, border: `1px solid ${LINE}`,
+              background: '#FFFBF2', color: INK, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 17, lineHeight: 1, padding: 0,
+            }}>×</button>
+          </div>
         </div>
 
         {/* Name */}

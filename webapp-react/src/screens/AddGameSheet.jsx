@@ -112,8 +112,6 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
         maxHeight: '92%', overflowY: 'auto',
         boxShadow: '0 -20px 50px rgba(0,0,0,0.2)',
       }}>
-        <div style={{ width: 44, height: 4, borderRadius: 2, background: 'rgba(26,22,18,0.2)', margin: '0 auto 10px' }} />
-
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase' }}>Новая партия</div>
