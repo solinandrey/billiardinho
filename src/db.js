@@ -100,6 +100,9 @@ class BilliardDB {
         this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col} REAL`);
       }
     }
+    if (!colNames.includes("note")) {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN note TEXT`);
+    }
 
     // Колонки кастомизации профиля у users (color, short) — идемпотентно
     const userCols = this.db.pragma("table_info(users)").map(c => c.name);
@@ -191,16 +194,16 @@ class BilliardDB {
 
   // ─── Sessions (новый формат) ──────────────────────────────────────────────────
 
-  insertSessionForUsers(user1Id, user2Id, score1, score2, played_at, ratings = null) {
+  insertSessionForUsers(user1Id, user2Id, score1, score2, played_at, ratings = null, note = null) {
     const r1b = ratings?.r1_before ?? null;
     const r1a = ratings?.r1_after  ?? null;
     const r2b = ratings?.r2_before ?? null;
     const r2a = ratings?.r2_after  ?? null;
     const res = this.db.prepare(`
       INSERT INTO sessions
-        (score1, score2, played_at, user1_id, user2_id, r1_before, r1_after, r2_before, r2_after)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(score1, score2, played_at || new Date().toISOString(), user1Id, user2Id, r1b, r1a, r2b, r2a);
+        (score1, score2, played_at, user1_id, user2_id, r1_before, r1_after, r2_before, r2_after, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(score1, score2, played_at || new Date().toISOString(), user1Id, user2Id, r1b, r1a, r2b, r2a, note);
     return this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(res.lastInsertRowid);
   }
 

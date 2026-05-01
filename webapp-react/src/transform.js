@@ -60,6 +60,7 @@ export function transformApiData(apiData) {
     playedAt: s.played_at,
     r1_before: s.r1_before, r1_after: s.r1_after,
     r2_before: s.r2_before, r2_after: s.r2_after,
+    note: s.note || null,
   }));
 
   // Compute game/win counts

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { INK, MUTED, LINE } from '../theme.js';
 import { Icon } from '../components/Icon.jsx';
+import { haptic } from '../haptic.js';
 
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
@@ -27,8 +28,8 @@ function EditScoreCol({ player, val, setVal }) {
         color: '#fff', letterSpacing: -2, fontVariantNumeric: 'tabular-nums',
       }}>{val}</div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button onClick={() => setVal(Math.max(0, val - 1))} style={btnStyle}>−</button>
-        <button onClick={() => setVal(Math.min(15, val + 1))} style={btnStyle}>+</button>
+        <button onClick={() => { haptic.selection(); setVal(Math.max(0, val - 1)); }} style={btnStyle}>−</button>
+        <button onClick={() => { haptic.selection(); setVal(Math.min(15, val + 1)); }} style={btnStyle}>+</button>
       </div>
     </div>
   );
@@ -112,6 +113,7 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
   const [editing, setEditing] = useState(false);
   const [s1, setS1] = useState(game.s1);
   const [s2, setS2] = useState(game.s2);
+  const [note, setNote] = useState(game.note || '');
   const [confirmDel, setConfirmDel] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -128,15 +130,21 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
   const saveEdit = async () => {
     if (saving) return;
     setSaving(true);
+    haptic.medium();
     try {
-      await onSaved(game.id, s1, s2);
+      await onSaved(game.id, { s1, s2, note: note.trim() || null });
+      haptic.success();
       setEditing(false);
+    } catch (e) {
+      console.error(e);
+      haptic.error();
     } finally {
       setSaving(false);
     }
   };
 
   const doDelete = async () => {
+    haptic.heavy();
     await onDelete(game.id);
     onClose();
   };
@@ -174,7 +182,7 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
               background: 'rgba(255,255,255,0.22)', fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
             }}>{resultLabel}</div>
             {!editing && (
-              <button onClick={() => { setS1(game.s1); setS2(game.s2); setEditing(true); setConfirmDel(false); }} aria-label="Редактировать" style={{
+              <button onClick={() => { haptic.light(); setS1(game.s1); setS2(game.s2); setNote(game.note || ''); setEditing(true); setConfirmDel(false); }} aria-label="Редактировать" style={{
                 width: 34, height: 34, borderRadius: 17,
                 background: 'rgba(255,255,255,0.22)', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
@@ -183,7 +191,7 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
               </button>
             )}
             {!editing && (
-              <button onClick={() => setConfirmDel(true)} aria-label="Удалить" style={{
+              <button onClick={() => { haptic.warning(); setConfirmDel(true); }} aria-label="Удалить" style={{
                 width: 34, height: 34, borderRadius: 17,
                 background: 'rgba(255,255,255,0.22)', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
@@ -230,9 +238,51 @@ export function GameDetailSheet({ game, byId, meId, winnerOf, onClose, onSaved, 
             </div>
           </div>
 
+          {/* Note: read-only view */}
+          {!editing && game.note && (
+            <div style={{
+              marginTop: 18, padding: '11px 14px',
+              background: 'rgba(255,255,255,0.16)',
+              border: '1px solid rgba(255,255,255,0.22)',
+              borderRadius: 14, textAlign: 'left',
+              fontSize: 13, lineHeight: 1.4, color: '#fff', fontWeight: 500,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              <div style={{
+                fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase',
+                opacity: 0.75, marginBottom: 4,
+              }}>Заметка</div>
+              {game.note}
+            </div>
+          )}
+
+          {/* Note: edit mode */}
           {editing && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button onClick={() => setEditing(false)} style={{
+            <div style={{ marginTop: 18, textAlign: 'left' }}>
+              <div style={{
+                fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.78)', marginBottom: 6,
+              }}>Заметка</div>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value.slice(0, 500))}
+                placeholder="Где играли, как, что-нибудь смешное…"
+                rows={2}
+                style={{
+                  width: '100%', boxSizing: 'border-box', resize: 'none',
+                  background: 'rgba(255,255,255,0.16)',
+                  border: '1px solid rgba(255,255,255,0.32)',
+                  borderRadius: 12, padding: '10px 12px', outline: 'none',
+                  fontFamily: 'Inter, system-ui, sans-serif', fontSize: 13.5,
+                  color: '#fff', lineHeight: 1.4,
+                }}
+              />
+            </div>
+          )}
+
+          {editing && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button onClick={() => { setEditing(false); setNote(game.note || ''); }} style={{
                 flex: 1, padding: '12px 0', borderRadius: 14,
                 background: 'rgba(255,255,255,0.18)', color: '#fff', border: 'none',
                 fontFamily: 'Archivo Black', fontSize: 13, letterSpacing: 0.4, cursor: 'pointer',

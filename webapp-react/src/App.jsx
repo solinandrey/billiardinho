@@ -133,12 +133,12 @@ export default function App() {
   };
 
   // ─── API actions ─────────────────────────────────────────────
-  const handleAddGame = async ({ opponentId, scoreMe, scoreOpp, playedAt }) => {
+  const handleAddGame = async ({ opponentId, scoreMe, scoreOpp, playedAt, note }) => {
     if (data.mock) {
       const newId = 'g' + Date.now();
       const iso = playedAt || new Date().toISOString();
       const dateStr = iso.split('T')[0];
-      data.games.unshift({ id: newId, p1: meId, p2: opponentId, s1: scoreMe, s2: scoreOpp, date: dateStr, playedAt: iso });
+      data.games.unshift({ id: newId, p1: meId, p2: opponentId, s1: scoreMe, s2: scoreOpp, date: dateStr, playedAt: iso, note: note || null });
       // keep chronological order (newest first)
       data.games.sort((a, b) => (b.playedAt || b.date).localeCompare(a.playedAt || a.date));
       setData({ ...data });
@@ -148,22 +148,30 @@ export default function App() {
     await fetch('/api/session', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp, played_at: playedAt }),
+      body: JSON.stringify({ uid, opponent_id: opponentId, score_me: scoreMe, score_opp: scoreOpp, played_at: playedAt, note }),
     });
     await reload();
   };
 
-  const handleSaveEdit = async (gameId, s1, s2) => {
+  const handleSaveEdit = async (gameId, patch, maybeS2) => {
+    // Backwards-compat: callers may pass (id, s1, s2) or (id, { s1, s2, note }).
+    const payload = (typeof patch === 'object' && patch !== null && !Array.isArray(patch))
+      ? patch
+      : { s1: patch, s2: maybeS2 };
     if (data.mock) {
       const g = data.games.find(x => x.id === gameId);
-      if (g) { g.s1 = s1; g.s2 = s2; }
+      if (g) {
+        if (payload.s1 != null) g.s1 = payload.s1;
+        if (payload.s2 != null) g.s2 = payload.s2;
+        if (payload.note !== undefined) g.note = payload.note || null;
+      }
       setData({ ...data });
       return;
     }
     await fetch(`/api/session/${gameId}`, {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ s1, s2 }),
+      body: JSON.stringify(payload),
     });
     await reload();
   };

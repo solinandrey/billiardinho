@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CREAM, MUTED, INK, LINE } from '../theme.js';
 import { Icon } from '../components/Icon.jsx';
+import { haptic } from '../haptic.js';
 
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
@@ -53,12 +54,12 @@ function ScoreBox({ player, val, setVal }) {
         }}
       />
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-        <button onClick={() => setVal(Math.max(0, val - 1))} style={{
+        <button onClick={() => { haptic.selection(); setVal(Math.max(0, val - 1)); }} style={{
           width: 26, height: 26, borderRadius: 13,
           background: '#EFE7D8', border: 'none', cursor: 'pointer',
           fontSize: 16, fontWeight: 700, color: INK, lineHeight: 1,
         }}>−</button>
-        <button onClick={() => setVal(Math.min(99, val + 1))} style={{
+        <button onClick={() => { haptic.selection(); setVal(Math.min(99, val + 1)); }} style={{
           width: 26, height: 26, borderRadius: 13,
           background: '#EFE7D8', border: 'none', cursor: 'pointer',
           fontSize: 16, fontWeight: 700, color: INK, lineHeight: 1,
@@ -74,6 +75,7 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
   const [oppId, setOppId] = useState(players.find(p => p.id !== me.id)?.id || null);
   const [oppQuery, setOppQuery] = useState('');
   const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
   const allOpponents = players.filter(p => p.id !== me.id);
@@ -84,13 +86,16 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
   const handleSave = async () => {
     if (!opp || saving) return;
     setSaving(true);
+    haptic.medium();
     try {
       // Store at noon UTC of the selected date — avoids TZ rollover to the previous day
       const playedAt = `${date}T12:00:00.000Z`;
-      await onSaved({ opponentId: opp.id, scoreMe: s1, scoreOpp: s2, playedAt });
+      await onSaved({ opponentId: opp.id, scoreMe: s1, scoreOpp: s2, playedAt, note: note.trim() || null });
+      haptic.success();
       onClose();
     } catch (e) {
       console.error(e);
+      haptic.error();
       setSaving(false);
     }
   };
@@ -205,6 +210,24 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
             }}
           />
         </label>
+
+        {/* Note (optional) */}
+        <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>
+          Заметка <span style={{ opacity: 0.55, textTransform: 'none', letterSpacing: 0, fontWeight: 600 }}>· необязательно</span>
+        </div>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value.slice(0, 500))}
+          placeholder="Где играли, как, что-нибудь смешное…"
+          rows={2}
+          style={{
+            width: '100%', boxSizing: 'border-box', resize: 'none',
+            background: '#FFFBF2', border: `1px solid ${LINE}`, borderRadius: 12,
+            padding: '10px 12px', marginBottom: 14, outline: 'none',
+            fontFamily: 'Inter, system-ui, sans-serif', fontSize: 13.5, color: INK,
+            lineHeight: 1.4,
+          }}
+        />
 
         {/* CTA */}
         <button onClick={handleSave} disabled={!opp || saving} style={{

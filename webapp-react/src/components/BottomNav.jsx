@@ -1,4 +1,5 @@
 import { Icon } from './Icon.jsx';
+import { haptic } from '../haptic.js';
 
 const items = [
   { id: 'home',    label: 'Главная',    icon: Icon.home },
@@ -64,11 +65,11 @@ export function BottomNav({ tab, setTab, openAdd }) {
           {items.map(it => it.center ? (
             <div key={it.id} />
           ) : (
-            <NavItem key={it.id} item={it} active={tab === it.id} onClick={() => setTab(it.id)} />
+            <NavItem key={it.id} item={it} active={tab === it.id} onClick={() => { haptic.light(); setTab(it.id); }} />
           ))}
         </div>
 
-        <button onClick={openAdd} aria-label="Добавить партию" style={{
+        <button onClick={() => { haptic.medium(); openAdd(); }} aria-label="Добавить партию" style={{
           position: 'absolute', left: '50%', top: GAP,
           transform: 'translateX(-50%)',
           width: FAB_SIZE, height: FAB_SIZE, borderRadius: FAB_SIZE / 2,

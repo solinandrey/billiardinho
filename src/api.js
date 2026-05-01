@@ -116,7 +116,7 @@ function handleApi(req, res, url, apiPath) {
   // POST /api/session — записать игру
   if (apiPath === '/session' && req.method === 'POST') {
     body().then(b => {
-      const { opponent_id, score_me, score_opp, played_at } = b;
+      const { opponent_id, score_me, score_opp, played_at, note } = b;
       if (!uid)          return err('unauthorized', 401);
       if (!opponent_id)  return err('opponent_id required');
       if (score_me == null || score_opp == null) return err('scores required');
@@ -131,11 +131,13 @@ function handleApi(req, res, url, apiPath) {
 
       const { newR1, newR2, d1, d2 } = computeNewRatings(me.rating, opp.rating, score_me, score_opp, meGames, oppGames);
 
+      const cleanNote = (typeof note === 'string' && note.trim()) ? note.trim().slice(0, 500) : null;
       const session = db.insertSessionForUsers(
         me.id, opp.id,
         score_me, score_opp,
         played_at || new Date().toISOString(),
-        { r1_before: me.rating, r1_after: newR1, r2_before: opp.rating, r2_after: newR2 }
+        { r1_before: me.rating, r1_after: newR1, r2_before: opp.rating, r2_after: newR2 },
+        cleanNote
       );
 
       db.updateUserRatings(me.id, newR1, opp.id, newR2);
@@ -145,16 +147,31 @@ function handleApi(req, res, url, apiPath) {
     return;
   }
 
-  // PATCH /api/session/:id — edit a session's score
+  // PATCH /api/session/:id — edit a session's score and/or note
   const sessionEditMatch = apiPath.match(/^\/session\/(\d+)$/);
   if (sessionEditMatch && req.method === 'PATCH') {
     body().then(b => {
-      const sessionId = parseInt(sessionEditMatch[1]);
-      const { s1, s2 } = b;
-      if (s1 == null || s2 == null) return err('s1 and s2 required');
-      db.db.prepare('UPDATE sessions SET score1 = ?, score2 = ? WHERE id = ?').run(s1, s2, sessionId);
-      json({ ok: true });
-    });
+      try {
+        const sessionId = parseInt(sessionEditMatch[1]);
+        const { s1, s2, note } = b;
+        const updates = [];
+        const values = [];
+        if (s1 != null) { updates.push('score1 = ?'); values.push(s1); }
+        if (s2 != null) { updates.push('score2 = ?'); values.push(s2); }
+        if (note !== undefined) {
+          const cleanNote = (typeof note === 'string' && note.trim()) ? note.trim().slice(0, 500) : null;
+          updates.push('note = ?');
+          values.push(cleanNote);
+        }
+        if (!updates.length) return err('nothing to update');
+        values.push(sessionId);
+        db.db.prepare(`UPDATE sessions SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+        json({ ok: true });
+      } catch (e) {
+        console.error('PATCH /session failed:', e);
+        err(e.message || 'session update failed', 500);
+      }
+    }).catch(e => { console.error(e); err('bad request', 400); });
     return;
   }
 

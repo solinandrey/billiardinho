@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MUTED, INK, LINE } from '../theme.js';
+import { haptic } from '../haptic.js';
 
 const PALETTE = ['#E8542A','#4F7FE8','#2ECC7A','#A855F7','#E5A83A','#E3457F','#2BB8CC','#6B8E23'];
 
@@ -18,10 +19,13 @@ export function SettingsSheet({ player, onClose, onSaved }) {
     if (!canSave) return;
     setSaving(true);
     setError(null);
+    haptic.medium();
     try {
       await (onSaved && onSaved({ name: name.trim(), short: short.trim().slice(0, 2), color }));
+      haptic.success();
       onClose();
     } catch (e) {
+      haptic.error();
       setError(e?.message || String(e));
       setSaving(false);
     }
@@ -83,7 +87,7 @@ export function SettingsSheet({ player, onClose, onSaved }) {
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>Цвет</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {PALETTE.map(c => (
-              <button key={c} onClick={() => setColor(c)} aria-label={c} style={{
+              <button key={c} onClick={() => { haptic.selection(); setColor(c); }} aria-label={c} style={{
                 width: 34, height: 34, borderRadius: 17, border: 'none',
                 background: c, cursor: 'pointer', padding: 0,
                 boxShadow: color === c ? `0 0 0 3px #FFFBF2, 0 0 0 5px ${c}` : 'none',
