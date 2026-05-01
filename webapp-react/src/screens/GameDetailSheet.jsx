@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { INK, MUTED, LINE } from '../theme.js';
 import { Icon } from '../components/Icon.jsx';
+import { Avatar } from '../components/Avatar.jsx';
 import { haptic } from '../haptic.js';
 
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
@@ -68,17 +69,14 @@ function PlayerTag({ p, isWinner, onClick, eloBefore, eloAfter }) {
       {/* Avatar with crown */}
       <div style={{ position: 'relative', width: 50, height: 50, margin: '0 auto' }}>
         {isWinner && (
-          <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)' }}>
+          <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
             {Icon.crown('#fff')}
           </div>
         )}
-        <div style={{
-          width: 50, height: 50, borderRadius: 25,
-          background: '#fff', color: p.color,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'Archivo Black', fontSize: 20,
+        <Avatar player={p} size={50} style={{
           boxShadow: isWinner ? '0 0 0 3px rgba(255,255,255,0.5)' : 'none',
-        }}>{p.short}</div>
+          border: '2px solid rgba(255,255,255,0.5)',
+        }} />
       </div>
 
       {/* Winner badge — reserved height so both sides stay equal */}

@@ -191,6 +191,47 @@ export default function App() {
     await reload();
   };
 
+  const handleAvatarUpload = async (dataUrl) => {
+    if (data.mock) {
+      // In mock mode, just stash the data URL on the player object so the UI can render it.
+      const me = byId[meId];
+      if (me) me.avatar_v = String(Date.now());
+      me.__mockAvatarDataUrl = dataUrl;
+      setData({ ...data });
+      return;
+    }
+    const tg = window.Telegram?.WebApp;
+    const urlUid = new URLSearchParams(window.location.search).get('uid');
+    const uid = tg?.initDataUnsafe?.user?.id || urlUid;
+    const res = await fetch('/api/me/avatar', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ uid, dataUrl }),
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    await reload();
+  };
+
+  const handleAvatarRemove = async () => {
+    if (data.mock) {
+      const me = byId[meId];
+      if (me) { me.avatar_v = null; delete me.__mockAvatarDataUrl; }
+      setData({ ...data });
+      return;
+    }
+    const res = await fetch('/api/me/avatar', { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    await reload();
+  };
+
   const handleSaveSettings = async (updates) => {
     if (data.mock) {
       Object.assign(byId[meId], updates);
@@ -243,6 +284,8 @@ export default function App() {
           goBack={goBack}
           fromRoot={top.params.playerId === meId && stack.length === 1}
           onSaveSettings={handleSaveSettings}
+          onAvatarUpload={handleAvatarUpload}
+          onAvatarRemove={handleAvatarRemove}
         />
       );
     } else if (top.kind === 'h2h') {

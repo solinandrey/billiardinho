@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CREAM, MUTED, INK, LINE } from '../theme.js';
 import { Icon } from '../components/Icon.jsx';
+import { Avatar } from '../components/Avatar.jsx';
 import { haptic } from '../haptic.js';
 
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
@@ -173,12 +174,7 @@ export function AddGameSheet({ me, players, onClose, onSaved }) {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                 color: sel ? '#fff' : INK,
               }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 16, background: p.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'Archivo Black', color: '#fff', fontSize: 13,
-                  border: sel ? '2px solid rgba(255,255,255,0.5)' : 'none',
-                }}>{p.short}</div>
+                <Avatar player={p} size={32} style={sel ? { border: '2px solid rgba(255,255,255,0.5)' } : {}} />
                 <span style={{ fontSize: 11, fontWeight: 700 }}>{p.name}</span>
               </button>
             );

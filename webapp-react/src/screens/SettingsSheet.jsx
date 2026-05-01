@@ -1,19 +1,25 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MUTED, INK, LINE } from '../theme.js';
+import { Avatar } from '../components/Avatar.jsx';
 import { haptic } from '../haptic.js';
+import { resizeToAvatarDataUrl } from '../imageResize.js';
 
 const PALETTE = ['#E8542A','#4F7FE8','#2ECC7A','#A855F7','#E5A83A','#E3457F','#2BB8CC','#6B8E23'];
 
-export function SettingsSheet({ player, onClose, onSaved }) {
+export function SettingsSheet({ player, onClose, onSaved, onAvatarUpload, onAvatarRemove }) {
   const [name, setName] = useState(player.name);
   const [short, setShort] = useState(player.short);
   const [color, setColor] = useState(player.color);
   const [saving, setSaving] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState(null); // optimistic preview while uploading
+  const fileRef = useRef(null);
 
   const dirty = name.trim() !== player.name || short.trim() !== player.short || color !== player.color;
   const canSave = dirty && !saving && name.trim().length > 0 && short.trim().length > 0;
+  const hasAvatar = !!player.avatar_v || !!previewDataUrl;
 
   const save = async () => {
     if (!canSave) return;
@@ -31,6 +37,52 @@ export function SettingsSheet({ player, onClose, onSaved }) {
     }
   };
 
+  const pickFile = () => {
+    if (avatarBusy) return;
+    haptic.light();
+    fileRef.current?.click();
+  };
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow picking the same file twice
+    if (!file) return;
+    setError(null);
+    setAvatarBusy(true);
+    try {
+      const dataUrl = await resizeToAvatarDataUrl(file);
+      setPreviewDataUrl(dataUrl); // optimistic
+      await onAvatarUpload(dataUrl);
+      haptic.success();
+    } catch (err) {
+      haptic.error();
+      setError(err?.message || String(err));
+      setPreviewDataUrl(null);
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const removeAvatar = async () => {
+    if (avatarBusy || !player.avatar_v) return;
+    haptic.warning();
+    setError(null);
+    setAvatarBusy(true);
+    try {
+      await onAvatarRemove();
+      setPreviewDataUrl(null);
+      haptic.success();
+    } catch (err) {
+      haptic.error();
+      setError(err?.message || String(err));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  // For the preview circle we want to show: optimistic dataUrl > saved avatar > initials.
+  const previewPlayer = { ...player, color, short: short || '—' };
+
   return createPortal((
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -41,6 +93,7 @@ export function SettingsSheet({ player, onClose, onSaved }) {
         background: '#FFFBF2', color: INK,
         borderRadius: '26px 26px 0 0',
         padding: '14px 20px 26px',
+        maxHeight: '92vh', overflowY: 'auto',
         boxShadow: '0 -20px 50px rgba(0,0,0,0.28)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
@@ -49,19 +102,69 @@ export function SettingsSheet({ player, onClose, onSaved }) {
             <div style={{ fontFamily: 'Archivo Black', fontSize: 20, letterSpacing: -0.3, marginTop: 2 }}>Профиль</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 54, height: 54, borderRadius: 27,
-              background: color, color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.6,
-              transition: 'background 160ms ease',
-            }}>{short || '—'}</div>
+            {/* Avatar preview — uses optimistic data URL while uploading */}
+            <div style={{ position: 'relative', width: 54, height: 54 }}>
+              {previewDataUrl ? (
+                <img src={previewDataUrl} alt="" style={{
+                  width: 54, height: 54, borderRadius: 27, objectFit: 'cover', display: 'block',
+                }} />
+              ) : (
+                <Avatar player={previewPlayer} size={54} />
+              )}
+              {avatarBusy && (
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: 27,
+                  background: 'rgba(0,0,0,0.45)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite', display: 'inline-block',
+                  }} />
+                </div>
+              )}
+            </div>
             <button onClick={onClose} aria-label="Закрыть" style={{
               width: 32, height: 32, borderRadius: 16, border: `1px solid ${LINE}`,
               background: '#FFFBF2', color: INK, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 17, lineHeight: 1, padding: 0,
             }}>×</button>
+          </div>
+        </div>
+
+        {/* Photo */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>Фото</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFile}
+              style={{ display: 'none' }}
+            />
+            <button onClick={pickFile} disabled={avatarBusy} style={{
+              flex: '1 1 140px', padding: '11px 14px', borderRadius: 12,
+              border: `1px solid ${LINE}`, background: '#fff', color: INK,
+              fontFamily: 'Inter, system-ui, sans-serif', fontSize: 13, fontWeight: 700,
+              cursor: avatarBusy ? 'default' : 'pointer', opacity: avatarBusy ? 0.55 : 1,
+            }}>
+              {hasAvatar ? '🖼  Заменить фото' : '🖼  Загрузить фото'}
+            </button>
+            {hasAvatar && (
+              <button onClick={removeAvatar} disabled={avatarBusy || !player.avatar_v} style={{
+                padding: '11px 14px', borderRadius: 12,
+                border: `1px solid ${LINE}`, background: 'transparent', color: '#B33A1A',
+                fontFamily: 'Inter, system-ui, sans-serif', fontSize: 13, fontWeight: 700,
+                cursor: (avatarBusy || !player.avatar_v) ? 'default' : 'pointer',
+                opacity: (avatarBusy || !player.avatar_v) ? 0.4 : 1,
+              }}>Убрать</button>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
+            JPEG / PNG / WebP. Сжимается до 256×256 на твоём телефоне до отправки.
           </div>
         </div>
 

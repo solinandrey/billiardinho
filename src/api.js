@@ -88,9 +88,18 @@ function handleApi(req, res, url, apiPath) {
     req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve({}); } });
   });
 
+  // Strip the avatar BLOB before sending a single user back to the client.
+  // The lightweight `avatar_updated_at` stays so the frontend can cache-bust the image URL.
+  const sanitizeUser = (u) => {
+    if (!u) return u;
+    // eslint-disable-next-line no-unused-vars
+    const { avatar, avatar_mime, ...rest } = u;
+    return rest;
+  };
+
   // GET /api/me — данные текущего пользователя
   if (apiPath === '/me' && req.method === 'GET') {
-    const user     = uid ? db.getUserByUid(uid) : null;
+    const user     = uid ? sanitizeUser(db.getUserByUid(uid)) : null;
     const users    = db.getAllUsers();
     const sessions = db.getAllSessionsWithUsers();
     return json({ user, users, sessions });
@@ -107,10 +116,63 @@ function handleApi(req, res, url, apiPath) {
   if (h2hMatch && req.method === 'GET') {
     const [, id1, id2] = h2hMatch.map(Number);
     const sessions = db.getH2HSessions(id1, id2);
-    const u1 = db.getUserById(id1);
-    const u2 = db.getUserById(id2);
+    const u1 = sanitizeUser(db.getUserById(id1));
+    const u2 = sanitizeUser(db.getUserById(id2));
     if (!u1 || !u2) return err('user not found', 404);
     return json({ user1: u1, user2: u2, sessions });
+  }
+
+  // GET /api/avatar/:id — return the stored avatar blob for a user
+  const avatarGetMatch = apiPath.match(/^\/avatar\/(\d+)$/);
+  if (avatarGetMatch && req.method === 'GET') {
+    const userId = parseInt(avatarGetMatch[1]);
+    const row = db.getAvatar(userId);
+    if (!row || !row.avatar) return err('not found', 404);
+    res.writeHead(200, {
+      'Content-Type': row.avatar_mime || 'image/jpeg',
+      'Content-Length': row.avatar.length,
+      // 1 year cache; URL has ?v=<updated_at> for invalidation
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
+    res.end(row.avatar);
+    return;
+  }
+
+  // POST /api/me/avatar — upload avatar. Body: { uid, dataUrl: "data:image/jpeg;base64,..." }
+  if (apiPath === '/me/avatar' && req.method === 'POST') {
+    body().then(b => {
+      try {
+        const { uid: bodyUid, dataUrl } = b;
+        const resolvedUid = bodyUid || uid;
+        if (!resolvedUid) return err('uid required', 401);
+        const user = db.getUserByUid(resolvedUid);
+        if (!user) return err('user not found', 404);
+        if (typeof dataUrl !== 'string') return err('dataUrl required');
+
+        const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+        if (!m) return err('expected JPEG/PNG/WebP data URL');
+        const mime = m[1];
+        const buf = Buffer.from(m[2], 'base64');
+        // 200 KB hard cap — clients should resize to ~256x256 (≈25 KB), this is just a guard.
+        if (buf.length > 200 * 1024) return err('image too large (max 200 KB after resize)');
+
+        const ts = db.setAvatar(user.id, buf, mime);
+        json({ ok: true, avatar_updated_at: ts });
+      } catch (e) {
+        console.error('POST /me/avatar failed:', e);
+        err(e.message || 'avatar upload failed', 500);
+      }
+    }).catch(e => { console.error(e); err('bad request', 400); });
+    return;
+  }
+
+  // DELETE /api/me/avatar — remove avatar
+  if (apiPath === '/me/avatar' && req.method === 'DELETE') {
+    if (!uid) return err('uid required', 401);
+    const user = db.getUserByUid(uid);
+    if (!user) return err('user not found', 404);
+    db.clearAvatar(user.id);
+    return json({ ok: true });
   }
 
   // POST /api/session — записать игру

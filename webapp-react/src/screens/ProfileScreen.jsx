@@ -6,7 +6,7 @@ import { FeedCard } from '../components/FeedCard.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { SettingsSheet } from './SettingsSheet.jsx';
 
-export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, relativeDate, recordBetween, gamesBetween, rivalsOf, recentGamesOf, ratingHistoryOf, go, goBack, fromRoot, onSaveSettings }) {
+export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, relativeDate, recordBetween, gamesBetween, rivalsOf, recentGamesOf, ratingHistoryOf, go, goBack, fromRoot, onSaveSettings, onAvatarUpload, onAvatarRemove }) {
   const p = byId[playerId];
   const winPct = p.games ? Math.round(p.wins * 100 / p.games) : 0;
   const rivals = rivalsOf(p.id).filter(r => r.total > 0);
@@ -96,13 +96,10 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', paddingLeft: goBack ? 36 : 0, paddingRight: fromRoot ? 36 : 0 }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: 36,
-              background: '#fff', color: p.color,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Archivo Black', fontSize: 32, letterSpacing: -1,
-              boxShadow: '0 8px 20px rgba(0,0,0,0.18)', flexShrink: 0,
-            }}>{p.short}</div>
+            <Avatar player={p} size={72} style={{
+              boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+              border: '2px solid rgba(255,255,255,0.55)',
+            }} />
             <div style={{ color: '#fff', minWidth: 0 }}>
               <div style={{ fontFamily: 'Archivo Black', fontSize: 22, letterSpacing: -0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
               <div style={{
@@ -341,7 +338,13 @@ export function ProfileScreen({ playerId, meId, players, games, byId, winnerOf, 
       </div>
 
       {settingsOpen && (
-        <SettingsSheet player={p} onClose={() => setSettingsOpen(false)} onSaved={onSaveSettings} />
+        <SettingsSheet
+          player={p}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={onSaveSettings}
+          onAvatarUpload={onAvatarUpload}
+          onAvatarRemove={onAvatarRemove}
+        />
       )}
     </div>
   );

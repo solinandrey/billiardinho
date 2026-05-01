@@ -44,6 +44,7 @@ export function transformApiData(apiData) {
     elo: u.rating ?? 3.0,
     games: 0,
     wins: 0,
+    avatar_v: u.avatar_updated_at || null,
   }));
 
   const byId = Object.fromEntries(players.map(p => [p.id, p]));

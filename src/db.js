@@ -104,13 +104,22 @@ class BilliardDB {
       this.db.exec(`ALTER TABLE sessions ADD COLUMN note TEXT`);
     }
 
-    // Колонки кастомизации профиля у users (color, short) — идемпотентно
+    // Колонки кастомизации профиля у users (color, short, avatar) — идемпотентно
     const userCols = this.db.pragma("table_info(users)").map(c => c.name);
     if (!userCols.includes("color")) {
       this.db.exec(`ALTER TABLE users ADD COLUMN color TEXT`);
     }
     if (!userCols.includes("short")) {
       this.db.exec(`ALTER TABLE users ADD COLUMN short TEXT`);
+    }
+    if (!userCols.includes("avatar")) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN avatar BLOB`);
+    }
+    if (!userCols.includes("avatar_mime")) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN avatar_mime TEXT`);
+    }
+    if (!userCols.includes("avatar_updated_at")) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN avatar_updated_at TEXT`);
     }
 
     // Старые БД имеют pair_id INTEGER NOT NULL — это мешает вставке партий
@@ -163,7 +172,33 @@ class BilliardDB {
   }
 
   getAllUsers() {
-    return this.db.prepare("SELECT * FROM users ORDER BY rating DESC").all();
+    // Explicit column list — avoid pulling the avatar BLOB into every list response.
+    return this.db.prepare(`
+      SELECT id, uid, username, name, rating, created_at, color, short, avatar_updated_at
+      FROM users
+      ORDER BY rating DESC
+    `).all();
+  }
+
+  /** Returns { avatar, avatar_mime, avatar_updated_at } for a single user, or null. */
+  getAvatar(userId) {
+    return this.db.prepare(
+      "SELECT avatar, avatar_mime, avatar_updated_at FROM users WHERE id = ?"
+    ).get(userId);
+  }
+
+  setAvatar(userId, blob, mime) {
+    const ts = new Date().toISOString();
+    this.db.prepare(
+      "UPDATE users SET avatar = ?, avatar_mime = ?, avatar_updated_at = ? WHERE id = ?"
+    ).run(blob, mime, ts, userId);
+    return ts;
+  }
+
+  clearAvatar(userId) {
+    this.db.prepare(
+      "UPDATE users SET avatar = NULL, avatar_mime = NULL, avatar_updated_at = NULL WHERE id = ?"
+    ).run(userId);
   }
 
   /** Регистрация нового пользователя */
