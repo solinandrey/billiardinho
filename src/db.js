@@ -101,6 +101,15 @@ class BilliardDB {
       }
     }
 
+    // Колонки кастомизации профиля у users (color, short) — идемпотентно
+    const userCols = this.db.pragma("table_info(users)").map(c => c.name);
+    if (!userCols.includes("color")) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN color TEXT`);
+    }
+    if (!userCols.includes("short")) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN short TEXT`);
+    }
+
     // Старые БД имеют pair_id INTEGER NOT NULL — это мешает вставке партий
     // без пары. Пересобираем таблицу, если constraint есть.
     const pairIdCol = cols.find(c => c.name === "pair_id");

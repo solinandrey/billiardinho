@@ -168,15 +168,21 @@ function handleApi(req, res, url, apiPath) {
   // PATCH /api/me/settings — update user display settings
   if (apiPath === '/me/settings' && req.method === 'PATCH') {
     body().then(b => {
-      const { uid: bodyUid, name, short, color } = b;
-      const resolvedUid = bodyUid || uid;
-      if (!resolvedUid) return err('uid required', 401);
-      const user = db.getUserByUid(resolvedUid);
-      if (!user) return err('user not found', 404);
-      if (name)  db.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, user.id);
-      if (color) db.db.prepare('UPDATE users SET color = ? WHERE id = ?').run(color, user.id);
-      json({ ok: true });
-    });
+      try {
+        const { uid: bodyUid, name, short, color } = b;
+        const resolvedUid = bodyUid || uid;
+        if (!resolvedUid) return err('uid required', 401);
+        const user = db.getUserByUid(resolvedUid);
+        if (!user) return err('user not found', 404);
+        if (name)  db.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, user.id);
+        if (short) db.db.prepare('UPDATE users SET short = ? WHERE id = ?').run(short, user.id);
+        if (color) db.db.prepare('UPDATE users SET color = ? WHERE id = ?').run(color, user.id);
+        json({ ok: true });
+      } catch (e) {
+        console.error('PATCH /me/settings failed:', e);
+        err(e.message || 'settings update failed', 500);
+      }
+    }).catch(e => { console.error(e); err('bad request', 400); });
     return;
   }
 

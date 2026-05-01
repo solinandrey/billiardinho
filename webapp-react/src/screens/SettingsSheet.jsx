@@ -8,14 +8,23 @@ export function SettingsSheet({ player, onClose, onSaved }) {
   const [name, setName] = useState(player.name);
   const [short, setShort] = useState(player.short);
   const [color, setColor] = useState(player.color);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   const dirty = name.trim() !== player.name || short.trim() !== player.short || color !== player.color;
-  const canSave = dirty && name.trim().length > 0 && short.trim().length > 0;
+  const canSave = dirty && !saving && name.trim().length > 0 && short.trim().length > 0;
 
-  const save = () => {
+  const save = async () => {
     if (!canSave) return;
-    onSaved && onSaved({ name: name.trim(), short: short.trim().slice(0, 2), color });
-    onClose();
+    setSaving(true);
+    setError(null);
+    try {
+      await (onSaved && onSaved({ name: name.trim(), short: short.trim().slice(0, 2), color }));
+      onClose();
+    } catch (e) {
+      setError(e?.message || String(e));
+      setSaving(false);
+    }
   };
 
   return createPortal((
@@ -84,11 +93,20 @@ export function SettingsSheet({ player, onClose, onSaved }) {
           </div>
         </div>
 
+        {error && (
+          <div style={{
+            marginBottom: 12, padding: '10px 12px', borderRadius: 10,
+            background: 'rgba(232,84,42,0.12)', color: '#B33A1A',
+            fontSize: 12.5, fontWeight: 600, wordBreak: 'break-word',
+          }}>{error}</div>
+        )}
+
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} disabled={saving} style={{
             flex: 1, padding: '13px 0', borderRadius: 14,
             background: 'transparent', color: INK, border: `1px solid ${LINE}`,
-            fontFamily: 'Archivo Black', fontSize: 13, letterSpacing: 0.4, cursor: 'pointer',
+            fontFamily: 'Archivo Black', fontSize: 13, letterSpacing: 0.4,
+            cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.5 : 1,
           }}>ОТМЕНА</button>
           <button onClick={save} disabled={!canSave} style={{
             flex: 2, padding: '13px 0', borderRadius: 14,
@@ -97,8 +115,21 @@ export function SettingsSheet({ player, onClose, onSaved }) {
             border: 'none',
             fontFamily: 'Archivo Black', fontSize: 13, letterSpacing: 0.4,
             cursor: canSave ? 'pointer' : 'default',
-          }}>СОХРАНИТЬ</button>
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            {saving && (
+              <span style={{
+                width: 14, height: 14, borderRadius: '50%',
+                border: '2px solid rgba(255,251,242,0.4)',
+                borderTopColor: '#F5EFE4',
+                animation: 'spin 0.8s linear infinite',
+                display: 'inline-block',
+              }} />
+            )}
+            {saving ? 'СОХРАНЯЮ…' : 'СОХРАНИТЬ'}
+          </button>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   ), document.body);

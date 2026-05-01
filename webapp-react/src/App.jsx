@@ -185,12 +185,19 @@ export default function App() {
       setData({ ...data });
       return;
     }
-    const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    await fetch('/api/me/settings', {
+    const tg = window.Telegram?.WebApp;
+    const urlUid = new URLSearchParams(window.location.search).get('uid');
+    const uid = tg?.initDataUnsafe?.user?.id || urlUid;
+    const res = await fetch('/api/me/settings', {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify({ uid, ...updates }),
     });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
     await reload();
   };
 
