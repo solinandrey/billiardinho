@@ -92,8 +92,8 @@ export default function App() {
       }}>
         <div style={{ fontFamily: 'Archivo Black', fontSize: 32 }}>😵</div>
         <div style={{ fontFamily: 'Archivo Black', fontSize: 20 }}>Не удалось загрузить данные</div>
-        <div style={{ fontSize: 13, color: '#8A8070', fontWeight: 500, maxWidth: 300, wordBreak: 'break-word' }}>
-          {loadError}
+        <div style={{ fontSize: 13, color: '#8A8070', fontWeight: 500, maxWidth: 300 }}>
+          Проверь соединение и попробуй ещё раз. Если не получается — закрой и открой мини-приложение заново.
         </div>
         <button onClick={reload} style={{
           marginTop: 8, padding: '10px 20px', borderRadius: 14, border: 'none',
@@ -336,6 +336,8 @@ export default function App() {
         go={go}
         fromRoot
         onSaveSettings={handleSaveSettings}
+        onAvatarUpload={handleAvatarUpload}
+        onAvatarRemove={handleAvatarRemove}
       />
     );
   }

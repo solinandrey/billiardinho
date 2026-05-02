@@ -31,8 +31,9 @@ export function SettingsSheet({ player, onClose, onSaved, onAvatarUpload, onAvat
       haptic.success();
       onClose();
     } catch (e) {
+      console.error('settings save failed:', e);
       haptic.error();
-      setError(e?.message || String(e));
+      setError('Не удалось сохранить настройки. Попробуй ещё раз.');
       setSaving(false);
     }
   };
@@ -52,11 +53,13 @@ export function SettingsSheet({ player, onClose, onSaved, onAvatarUpload, onAvat
     try {
       const dataUrl = await resizeToAvatarDataUrl(file);
       setPreviewDataUrl(dataUrl); // optimistic
+      if (typeof onAvatarUpload !== 'function') throw new Error('handler missing');
       await onAvatarUpload(dataUrl);
       haptic.success();
     } catch (err) {
+      console.error('avatar upload failed:', err);
       haptic.error();
-      setError(err?.message || String(err));
+      setError('Не удалось загрузить фото. Попробуй ещё раз или выбери другую картинку.');
       setPreviewDataUrl(null);
     } finally {
       setAvatarBusy(false);
@@ -69,12 +72,14 @@ export function SettingsSheet({ player, onClose, onSaved, onAvatarUpload, onAvat
     setError(null);
     setAvatarBusy(true);
     try {
+      if (typeof onAvatarRemove !== 'function') throw new Error('handler missing');
       await onAvatarRemove();
       setPreviewDataUrl(null);
       haptic.success();
     } catch (err) {
+      console.error('avatar remove failed:', err);
       haptic.error();
-      setError(err?.message || String(err));
+      setError('Не удалось убрать фото. Попробуй ещё раз.');
     } finally {
       setAvatarBusy(false);
     }
