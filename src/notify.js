@@ -72,27 +72,24 @@ export function notifyMatchRecorded(opp, me, scoreMe, scoreOpp, deltaOpp, note) 
   const meName = md(me?.name);
   const won = scoreOpp > scoreMe;
   const lost = scoreOpp < scoreMe;
-  const headline = won
-    ? `🏆 Ты выиграл у *${meName}*!`
-    : lost
-      ? `💔 Ты проиграл *${meName}*.`
-      : `🎱 Ничья с *${meName}*.`;
 
-  // From the opponent's perspective: their score on the left.
-  const scoreLine = `*${scoreOpp} : ${scoreMe}*`;
+  // Score is shown from the opponent's perspective (their value first).
+  const scoreStr = `${scoreOpp} : ${scoreMe}`;
+  const headline = won
+    ? `Победа над *${meName}*, ${scoreStr}.`
+    : lost
+      ? `Поражение от *${meName}*, ${scoreStr}.`
+      : `Ничья с *${meName}*, ${scoreStr}.`;
 
   let deltaLine = '';
   if (typeof deltaOpp === 'number' && Number.isFinite(deltaOpp)) {
     const sign = deltaOpp > 0 ? '+' : deltaOpp < 0 ? '−' : '±';
-    deltaLine = `\nРейтинг: ${sign}${Math.abs(deltaOpp).toFixed(2)}`;
+    deltaLine = `\nРейтинг: ${sign}${Math.abs(deltaOpp).toFixed(2)}.`;
   }
 
   const noteLine = note ? `\n\n_${md(note)}_` : '';
 
-  const text =
-    `${headline}\n` +
-    `*${meName}* записал партию.\n` +
-    `${scoreLine}${deltaLine}${noteLine}`;
+  const text = `${headline}${deltaLine}${noteLine}`;
 
   sendMessage(opp.uid, text, { reply_markup: webAppMarkup(opp.uid) });
 }
