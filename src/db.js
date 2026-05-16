@@ -227,6 +227,53 @@ class BilliardDB {
     this.db.prepare("UPDATE users SET rating = ? WHERE id = ?").run(newR2, user2Id);
   }
 
+  /**
+   * Recompute every user's rating and every session's r1/r2 before/after columns
+   * from scratch, replaying all matches in chronological order. Idempotent;
+   * needed after deleting or editing a session — otherwise current ratings
+   * still reflect the old chain and drift accumulates.
+   *
+   * Runs inside a single transaction so partial failures can't leave the DB
+   * in an inconsistent state.
+   */
+  recomputeAllRatings() {
+    const sessions = this.db.prepare(
+      "SELECT id, user1_id, user2_id, score1, score2 FROM sessions " +
+      "WHERE user1_id IS NOT NULL AND user2_id IS NOT NULL " +
+      "ORDER BY played_at ASC, id ASC"
+    ).all();
+
+    const ratings    = new Map();
+    const gameCounts = new Map();
+    const getR = id => ratings.get(id) ?? ELO_START;
+    const getG = id => gameCounts.get(id) ?? 0;
+
+    const resetAll      = this.db.prepare("UPDATE users SET rating = ?");
+    const updateRating  = this.db.prepare("UPDATE users SET rating = ? WHERE id = ?");
+    const updateSession = this.db.prepare(
+      "UPDATE sessions SET r1_before = ?, r1_after = ?, r2_before = ?, r2_after = ? WHERE id = ?"
+    );
+
+    const tx = this.db.transaction(() => {
+      resetAll.run(ELO_START);
+      for (const s of sessions) {
+        const r1 = getR(s.user1_id);
+        const r2 = getR(s.user2_id);
+        const g1 = getG(s.user1_id);
+        const g2 = getG(s.user2_id);
+        const { newR1, newR2 } = computeNewRatings(r1, r2, s.score1, s.score2, g1, g2);
+        ratings.set(s.user1_id, newR1);
+        ratings.set(s.user2_id, newR2);
+        gameCounts.set(s.user1_id, g1 + 1);
+        gameCounts.set(s.user2_id, g2 + 1);
+        updateRating.run(newR1, s.user1_id);
+        updateRating.run(newR2, s.user2_id);
+        updateSession.run(r1, newR1, r2, newR2, s.id);
+      }
+    });
+    tx();
+  }
+
   // ─── Sessions (новый формат) ──────────────────────────────────────────────────
 
   insertSessionForUsers(user1Id, user2Id, score1, score2, played_at, ratings = null, note = null) {

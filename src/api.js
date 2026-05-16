@@ -222,6 +222,7 @@ function handleApi(req, res, url, apiPath) {
         const { s1, s2, note } = b;
         const updates = [];
         const values = [];
+        const scoresChanged = s1 != null || s2 != null;
         if (s1 != null) { updates.push('score1 = ?'); values.push(s1); }
         if (s2 != null) { updates.push('score2 = ?'); values.push(s2); }
         if (note !== undefined) {
@@ -232,6 +233,8 @@ function handleApi(req, res, url, apiPath) {
         if (!updates.length) return err('nothing to update');
         values.push(sessionId);
         db.db.prepare(`UPDATE sessions SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+        // Scores affect ratings — replay the whole chain to stay consistent.
+        if (scoresChanged) db.recomputeAllRatings();
         json({ ok: true });
       } catch (e) {
         console.error('PATCH /session failed:', e);
@@ -245,6 +248,8 @@ function handleApi(req, res, url, apiPath) {
   if (sessionEditMatch && req.method === 'DELETE') {
     const sessionId = parseInt(sessionEditMatch[1]);
     db.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    // Removing a match invalidates every later rating — replay the whole chain.
+    db.recomputeAllRatings();
     return json({ ok: true });
   }
 
