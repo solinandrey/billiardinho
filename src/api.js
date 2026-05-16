@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db, computeNewRatings, ELO_START } from './db.js';
+import { notifyMatchRecorded } from './notify.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Serve React build output; fall back to legacy webapp if dist not present
@@ -203,6 +204,9 @@ function handleApi(req, res, url, apiPath) {
       );
 
       db.updateUserRatings(me.id, newR1, opp.id, newR2);
+
+      // Fire-and-forget notification to the opponent. Never blocks the response.
+      notifyMatchRecorded(opp, me, score_me, score_opp, d2, cleanNote);
 
       json({ session, my_rating: newR1, opp_rating: newR2, d1, d2 });
     });
