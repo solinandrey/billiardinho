@@ -16,16 +16,16 @@ const CUTOUT_R = FAB_SIZE / 2 + GAP;
 const POP = 10;
 
 function NavItem({ item, active, onClick }) {
-  const c = active ? '#FFFBF2' : 'rgba(255,251,242,0.55)';
+  const c = active ? '#FFFBF2' : 'rgba(255,251,242,0.72)';
   return (
     <button onClick={onClick} aria-label={item.label} style={{
       background: 'transparent', border: 'none', cursor: 'pointer',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
       padding: '4px 0', position: 'relative',
     }}>
-      {item.icon(c)}
+      {item.icon(c, active)}
       <div style={{
-        width: active ? 14 : 0, height: 2, borderRadius: 1,
+        width: active ? 16 : 0, height: 2, borderRadius: 1,
         background: '#FFFBF2', transition: 'width 160ms ease',
       }} />
     </button>

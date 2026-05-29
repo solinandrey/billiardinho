@@ -4,7 +4,32 @@ import { Avatar } from '../components/Avatar.jsx';
 
 const CREAM2_C = '#EFE7D8';
 
-export function StatsScreen({ players, games, months, eloSeries, activity, go }) {
+const ELO_START = 3.0;
+
+/**
+ * Δ за последние ~30 дней.
+ * Берём последнюю точку истории, помеченную датой ≤ 30 дней назад,
+ * и считаем разницу с текущим рейтингом. Если истории нет — 0.
+ * Если все точки внутри окна — стартовая база ELO_START.
+ */
+function monthlyDelta(playerId, ratingHistoryOf, currentElo) {
+  const hist = ratingHistoryOf ? ratingHistoryOf(playerId) : [];
+  if (!hist.length) return 0;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffISO = cutoff.toISOString().slice(0, 10);
+
+  // history is oldest-first; find the latest point strictly before cutoff.
+  let baseline = null;
+  for (const pt of hist) {
+    if (pt.date <= cutoffISO) baseline = pt.rating;
+    else break;
+  }
+  if (baseline == null) baseline = ELO_START;
+  return currentElo - baseline;
+}
+
+export function StatsScreen({ players, games, months, eloSeries, activity, ratingHistoryOf, go }) {
   const sorted = [...players].sort((a, b) => b.elo - a.elo);
   const maxActivity = Math.max(...activity, 1);
 
@@ -21,9 +46,9 @@ export function StatsScreen({ players, games, months, eloSeries, activity, go })
         <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 14 }}>Текущие позиции и изменение</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {sorted.map((p, idx) => {
-            const series = eloSeries[p.id] || [];
-            const delta = series.length >= 2 ? series[series.length - 1] - series[series.length - 2] : 0;
-            const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(2);
+            const delta = monthlyDelta(p.id, ratingHistoryOf, p.elo);
+            const absDelta = Math.abs(delta);
+            const deltaStr = (delta > 0 ? '+' : delta < 0 ? '−' : '±') + absDelta.toFixed(2);
             const deltaColor = delta > 0.05 ? '#2E9B5E' : (delta < -0.05 ? '#D14A3A' : MUTED);
             const widthPct = (p.elo / 10) * 100;
             return (
